@@ -1,0 +1,629 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Voice AI Coach</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:     #0d1117;
+    --bg1:    #161b22;
+    --bg2:    #21262d;
+    --line:   #30363d;
+    --muted:  #484f58;
+    --soft:   #8b949e;
+    --text:   #e6edf3;
+    --green:  #3fb950;
+    --gd:     #0d2a14;
+    --gb:     #1a4225;
+    --blue:   #58a6ff;
+    --red:    #f85149;
+    --amber:  #d29922;
+    --mono:   'IBM Plex Mono', monospace;
+    --sans:   'IBM Plex Sans', sans-serif;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  /* subtle grid bg */
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background-image:
+      linear-gradient(rgba(63,185,80,.025) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(63,185,80,.025) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .container {
+    width: 100%;
+    max-width: 680px;
+    padding: 32px 20px 60px;
+    position: relative;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  /* ── header ── */
+  header {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    border-bottom: 1px solid var(--line);
+    padding-bottom: 16px;
+  }
+  header h1 { font-size: 17px; font-weight: 600; color: var(--text); }
+  #lang-badge {
+    font-family: var(--mono);
+    font-size: 11px;
+    padding: 2px 9px;
+    border-radius: 10px;
+    background: var(--gd);
+    border: 1px solid var(--gb);
+    color: var(--green);
+  }
+  .header-right { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+  #clear-btn, .lang-toggle-btn {
+    font-family: var(--mono);
+    font-size: 11px;
+    padding: 4px 10px;
+    border-radius: 6px;
+    border: 1px solid var(--line);
+    background: none;
+    color: var(--muted);
+    cursor: pointer;
+    transition: color .15s, border-color .15s;
+  }
+  #clear-btn:hover { color: var(--red); border-color: var(--red); }
+
+  /* language toggle */
+  .lang-toggle {
+    display: flex;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    overflow: hidden;
+  }
+  .lang-toggle-btn {
+    border: none;
+    border-radius: 0;
+    padding: 4px 12px;
+    border-right: 1px solid var(--line);
+  }
+  .lang-toggle-btn:last-child { border-right: none; }
+  .lang-toggle-btn.active {
+    background: var(--gd);
+    color: var(--green);
+    border-color: var(--gb);
+  }
+  .lang-toggle-btn:hover:not(.active) { color: var(--soft); }
+
+  /* ── conversation ── */
+  #conversation {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    min-height: 240px;
+    max-height: 52vh;
+    overflow-y: auto;
+    padding: 4px 2px;
+    scroll-behavior: smooth;
+  }
+  #conversation::-webkit-scrollbar { width: 4px; }
+  #conversation::-webkit-scrollbar-track { background: transparent; }
+  #conversation::-webkit-scrollbar-thumb { background: var(--bg2); border-radius: 2px; }
+
+  .bubble {
+    max-width: 82%;
+    padding: 11px 15px;
+    border-radius: 12px;
+    font-size: 14px;
+    line-height: 1.65;
+    animation: popIn .2s ease both;
+  }
+  @keyframes popIn {
+    from { opacity:0; transform: translateY(6px) scale(.97); }
+    to   { opacity:1; transform: translateY(0) scale(1); }
+  }
+  .bubble.user {
+    align-self: flex-end;
+    background: var(--bg2);
+    border: 1px solid var(--line);
+    color: var(--text);
+    border-bottom-right-radius: 3px;
+  }
+  .bubble.ai {
+    align-self: flex-start;
+    background: var(--gd);
+    border: 1px solid var(--gb);
+    color: var(--text);
+    border-bottom-left-radius: 3px;
+  }
+  .bubble.ai .tip {
+    color: var(--green);
+    font-family: var(--mono);
+    font-size: 12px;
+    margin-top: 6px;
+    display: block;
+  }
+  .bubble.error {
+    align-self: flex-start;
+    background: rgba(248,81,73,.07);
+    border: 1px solid rgba(248,81,73,.25);
+    color: var(--red);
+    font-family: var(--mono);
+    font-size: 12px;
+  }
+
+  .empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    height: 200px;
+    color: var(--muted);
+    font-size: 13px;
+    font-family: var(--mono);
+  }
+  .empty-state span:first-child { font-size: 28px; }
+
+  /* ── latency badge ── */
+  .latency-badge {
+    align-self: flex-start;
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--muted);
+    padding: 2px 8px;
+    background: var(--bg2);
+    border-radius: 4px;
+    margin-top: -6px;
+    margin-left: 6px;
+  }
+  .latency-badge.fast { color: var(--green); }
+  .latency-badge.ok   { color: var(--amber); }
+  .latency-badge.slow { color: var(--red); }
+
+  /* ── record controls ── */
+  .controls {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+    padding: 20px 0 4px;
+  }
+
+  #record-btn {
+    width: 72px; height: 72px;
+    border-radius: 50%;
+    border: 2px solid var(--green);
+    background: var(--gd);
+    color: var(--green);
+    font-size: 26px;
+    cursor: pointer;
+    transition: all .2s;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 0 0 0 rgba(63,185,80,0);
+    position: relative;
+  }
+  #record-btn:hover:not(:disabled) {
+    background: var(--gb);
+    box-shadow: 0 0 0 6px rgba(63,185,80,.12);
+  }
+  #record-btn.recording {
+    border-color: var(--red);
+    background: rgba(248,81,73,.12);
+    color: var(--red);
+    animation: pulse 1.4s ease infinite;
+  }
+  #record-btn:disabled {
+    border-color: var(--muted);
+    background: var(--bg2);
+    color: var(--muted);
+    cursor: not-allowed;
+    animation: none;
+  }
+  @keyframes pulse {
+    0%,100% { box-shadow: 0 0 0 0 rgba(248,81,73,.4); }
+    50%      { box-shadow: 0 0 0 10px rgba(248,81,73,0); }
+  }
+
+  /* recording timer */
+  #timer {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--red);
+    min-height: 20px;
+    letter-spacing: 1px;
+  }
+
+  #status {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    min-height: 16px;
+    letter-spacing: .5px;
+  }
+  #status.active { color: var(--green); }
+  #status.error  { color: var(--red); }
+
+  /* ── instruction line ── */
+  .hint {
+    text-align: center;
+    font-size: 12px;
+    color: var(--muted);
+    font-family: var(--mono);
+  }
+
+  /* ── pipeline viz (shown while processing) ── */
+  #pipeline {
+    display: none;
+    gap: 6px;
+    justify-content: center;
+    align-items: center;
+    font-family: var(--mono);
+    font-size: 11px;
+  }
+  #pipeline.visible { display: flex; }
+  .pipe-step {
+    padding: 3px 10px;
+    border-radius: 4px;
+    border: 1px solid var(--line);
+    color: var(--muted);
+    background: var(--bg1);
+    transition: all .2s;
+  }
+  .pipe-step.active { border-color: var(--amber); color: var(--amber); background: var(--amber-d, #2a1f07); }
+  .pipe-step.done   { border-color: var(--green); color: var(--green); background: var(--gd); }
+  .pipe-arrow { color: var(--muted); font-size: 10px; }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <header>
+    <h1>🎙️ Voice AI Coach</h1>
+    <span id="lang-badge">loading…</span>
+    <div class="header-right">
+      <div class="lang-toggle" id="lang-toggle">
+        <button class="lang-toggle-btn active" data-lang="english" onclick="switchLang('english')">EN</button>
+        <button class="lang-toggle-btn" data-lang="chinese" onclick="switchLang('chinese')">中文</button>
+      </div>
+      <button id="clear-btn" onclick="clearHistory()">clear chat</button>
+    </div>
+  </header>
+
+  <!-- Conversation -->
+  <div id="conversation">
+    <div class="empty-state" id="empty">
+      <span>🎤</span>
+      <span>Click the mic to start speaking</span>
+    </div>
+  </div>
+
+  <!-- Pipeline status -->
+  <div id="pipeline">
+    <span class="pipe-step" id="step-asr">ASR</span>
+    <span class="pipe-arrow">→</span>
+    <span class="pipe-step" id="step-llm">LLM</span>
+    <span class="pipe-arrow">→</span>
+    <span class="pipe-step" id="step-tts">TTS</span>
+  </div>
+
+  <!-- Controls -->
+  <div class="controls">
+    <button id="record-btn" onclick="toggleRecord()">🎤</button>
+    <div id="timer"></div>
+    <div id="status">ready</div>
+  </div>
+
+  <div class="hint">Click mic to start · Click again to send</div>
+
+</div>
+
+<script>
+// ── State ──────────────────────────────────────────────────────────────────────
+let mediaRecorder = null;
+let audioChunks   = [];
+let recording     = false;
+let timerInterval = null;
+let timerSeconds  = 0;
+let activeAudio   = null;
+
+// ── Init ───────────────────────────────────────────────────────────────────────
+window.addEventListener("DOMContentLoaded", async () => {
+  try {
+    const r = await fetch("/config");
+    const c = await r.json();
+    updateLangUI(c.language);
+  } catch (e) {
+    setStatus("cannot reach server", "error");
+  }
+});
+
+function updateLangUI(lang) {
+  document.getElementById("lang-badge").textContent = lang;
+  document.title = `Voice AI — ${lang}`;
+  document.querySelectorAll(".lang-toggle-btn").forEach(btn => {
+    btn.classList.toggle("active", btn.dataset.lang === lang);
+  });
+}
+
+async function switchLang(lang) {
+  // Stop any playing audio
+  if (activeAudio) { activeAudio.pause(); activeAudio = null; }
+
+  setStatus("switching…");
+  try {
+    const formData = new FormData();
+    formData.append("language", lang);
+    const r = await fetch("/language", { method: "POST", body: formData });
+    if (!r.ok) throw new Error(await r.text());
+    const d = await r.json();
+    updateLangUI(d.language);
+    // Clear conversation UI
+    const conv = document.getElementById("conversation");
+    conv.innerHTML = `<div class="empty-state" id="empty">
+      <span>🎤</span><span>Click the mic to start speaking</span>
+    </div>`;
+    setStatus("ready");
+  } catch (e) {
+    setStatus("switch failed: " + e.message, "error");
+  }
+}
+
+// ── Record toggle ──────────────────────────────────────────────────────────────
+async function toggleRecord() {
+  if (recording) {
+    stopRecording();
+  } else {
+    await startRecording();
+  }
+}
+
+async function startRecording() {
+  // Stop any playing audio (barge-in behaviour)
+  if (activeAudio) {
+    activeAudio.pause();
+    activeAudio = null;
+  }
+
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  } catch (e) {
+    setStatus("mic permission denied", "error");
+    return;
+  }
+
+  // Prefer webm/opus; fall back to whatever the browser supports
+  const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
+    ? "audio/webm;codecs=opus"
+    : MediaRecorder.isTypeSupported("audio/webm")
+    ? "audio/webm"
+    : "";
+
+  mediaRecorder = new MediaRecorder(stream, mimeType ? { mimeType } : {});
+  audioChunks   = [];
+
+  mediaRecorder.ondataavailable = e => { if (e.data.size > 0) audioChunks.push(e.data); };
+  mediaRecorder.onstop = () => {
+    stream.getTracks().forEach(t => t.stop());
+    processAudio();
+  };
+
+  mediaRecorder.start(100);
+  recording = true;
+
+  const btn = document.getElementById("record-btn");
+  btn.classList.add("recording");
+  btn.textContent = "⏹";
+
+  timerSeconds = 0;
+  timerInterval = setInterval(() => {
+    timerSeconds++;
+    document.getElementById("timer").textContent =
+      `${String(Math.floor(timerSeconds/60)).padStart(2,"0")}:${String(timerSeconds%60).padStart(2,"0")}`;
+  }, 1000);
+
+  setStatus("recording…", "active");
+}
+
+function stopRecording() {
+  if (!mediaRecorder || mediaRecorder.state === "inactive") return;
+  clearInterval(timerInterval);
+  document.getElementById("timer").textContent = "";
+  mediaRecorder.stop();
+  recording = false;
+
+  const btn = document.getElementById("record-btn");
+  btn.classList.remove("recording");
+  btn.textContent = "🎤";
+  btn.disabled = true;
+}
+
+// ── Process audio: ASR → LLM+TTS ──────────────────────────────────────────────
+async function processAudio() {
+  const blob = new Blob(audioChunks, {
+    type: mediaRecorder.mimeType || "audio/webm",
+  });
+
+  if (blob.size < 1000) {
+    setStatus("too short — try again", "error");
+    document.getElementById("record-btn").disabled = false;
+    return;
+  }
+
+  showPipeline(true);
+  const t0 = performance.now();
+
+  // ── Step 1: ASR ──────────────────────────────────────────────────────────────
+  setStep("asr", "active");
+  setStatus("transcribing…");
+
+  let transcript;
+  try {
+    const formData = new FormData();
+    formData.append("audio", blob, "audio.webm");
+    const r = await fetch("/transcribe", { method: "POST", body: formData });
+    if (!r.ok) throw new Error(await r.text());
+    const data = await r.json();
+    transcript = data.transcript;
+  } catch (e) {
+    showError("ASR failed: " + e.message);
+    reset(); return;
+  }
+
+  const asrMs = Math.round(performance.now() - t0);
+  setStep("asr", "done");
+
+  if (!transcript) {
+    showError("Nothing heard — please try again");
+    reset(); return;
+  }
+
+  addBubble("user", transcript);
+
+  // ── Step 2 + 3: LLM + TTS ────────────────────────────────────────────────────
+  setStep("llm", "active");
+  setStatus("thinking…");
+
+  let reply, mp3b64, totalMs, llmMs, ttsMs;
+  try {
+    const formData = new FormData();
+    formData.append("transcript", transcript);
+    const r = await fetch("/chat", { method: "POST", body: formData });
+    if (!r.ok) throw new Error(await r.text());
+    const data = await r.json();
+    reply   = data.reply;
+    mp3b64  = data.mp3_base64;
+    totalMs = data.total_ms;
+    llmMs   = data.llm_ms;
+    ttsMs   = data.tts_ms;
+  } catch (e) {
+    showError("LLM/TTS failed: " + e.message);
+    reset(); return;
+  }
+
+  setStep("llm", "done");
+  setStep("tts", "done");
+
+  const endToEndMs = Math.round(performance.now() - t0);
+
+  addBubble("ai", reply);
+  addLatencyBadge(endToEndMs, asrMs, llmMs, ttsMs);
+
+  // ── Play TTS audio ────────────────────────────────────────────────────────────
+  setStatus("speaking…", "active");
+  try {
+    const mp3Bytes  = Uint8Array.from(atob(mp3b64), c => c.charCodeAt(0));
+    const audioBlob = new Blob([mp3Bytes], { type: "audio/mp3" });
+    const url       = URL.createObjectURL(audioBlob);
+    activeAudio     = new Audio(url);
+    activeAudio.onended = () => {
+      URL.revokeObjectURL(url);
+      activeAudio = null;
+      setStatus("ready");
+    };
+    await activeAudio.play();
+  } catch (e) {
+    setStatus("audio playback error", "error");
+  }
+
+  showPipeline(false);
+  reset();
+}
+
+// ── UI helpers ─────────────────────────────────────────────────────────────────
+function addBubble(role, text) {
+  const conv = document.getElementById("conversation");
+  document.getElementById("empty")?.remove();
+
+  const div = document.createElement("div");
+  div.className = `bubble ${role}`;
+
+  if (role === "ai") {
+    // Render [Tip: ...] / 【提示：...】 in green
+    const formatted = text
+      .replace(/\[([^\]]+)\]/g, '<span class="tip">[$1]</span>')
+      .replace(/【([^】]+)】/g, '<span class="tip">【$1】</span>');
+    div.innerHTML = formatted;
+  } else {
+    div.textContent = text;
+  }
+
+  conv.appendChild(div);
+  conv.scrollTop = conv.scrollHeight;
+}
+
+function addLatencyBadge(total, asr, llm, tts) {
+  const conv  = document.getElementById("conversation");
+  const badge = document.createElement("div");
+  const cls   = total < 700 ? "fast" : total < 1000 ? "ok" : "slow";
+  badge.className = `latency-badge ${cls}`;
+  badge.textContent = `${total}ms total (asr ${asr} · llm ${llm} · tts ${tts})`;
+  conv.appendChild(badge);
+  conv.scrollTop = conv.scrollHeight;
+}
+
+function showError(msg) {
+  const conv = document.getElementById("conversation");
+  document.getElementById("empty")?.remove();
+  const div = document.createElement("div");
+  div.className = "bubble error";
+  div.textContent = "⚠ " + msg;
+  conv.appendChild(div);
+  conv.scrollTop = conv.scrollHeight;
+}
+
+function setStatus(msg, cls = "") {
+  const el = document.getElementById("status");
+  el.textContent = msg;
+  el.className   = cls;
+}
+
+function setStep(id, state) {
+  const el = document.getElementById("step-" + id);
+  if (el) el.className = "pipe-step " + state;
+}
+
+function showPipeline(visible) {
+  const el = document.getElementById("pipeline");
+  el.classList.toggle("visible", visible);
+  if (visible) {
+    ["asr","llm","tts"].forEach(id => setStep(id, ""));
+  }
+}
+
+function reset() {
+  document.getElementById("record-btn").disabled = false;
+  document.getElementById("record-btn").textContent = "🎤";
+}
+
+async function clearHistory() {
+  await fetch("/history", { method: "DELETE" });
+  const conv = document.getElementById("conversation");
+  conv.innerHTML = `<div class="empty-state" id="empty">
+    <span>🎤</span><span>Click the mic to start speaking</span>
+  </div>`;
+  setStatus("chat cleared");
+  setTimeout(() => setStatus("ready"), 1500);
+}
+</script>
+</body>
+</html>
