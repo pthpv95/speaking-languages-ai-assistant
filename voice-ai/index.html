@@ -79,10 +79,11 @@
     /* ── header ── */
     header {
       display: flex;
-      align-items: baseline;
-      gap: 12px;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 10px;
       border-bottom: 1px solid var(--line);
-      padding-bottom: 16px;
+      padding-bottom: 12px;
     }
 
     header h1 {
@@ -91,20 +92,10 @@
       color: var(--text);
     }
 
-    #lang-badge {
-      font-family: var(--mono);
-      font-size: 11px;
-      padding: 2px 9px;
-      border-radius: 10px;
-      background: var(--gd);
-      border: 1px solid var(--gb);
-      color: var(--green);
-    }
-
     .header-right {
       margin-left: auto;
       display: flex;
-      gap: 8px;
+      gap: 6px;
       align-items: center;
     }
 
@@ -432,7 +423,6 @@
 
     <header>
       <h1>🎙️ Voice AI Coach</h1>
-      <span id="lang-badge">loading…</span>
       <div class="header-right">
         <div class="lang-toggle" id="lang-toggle">
           <button class="lang-toggle-btn active" data-lang="english" onclick="switchLang('english')">EN</button>
@@ -509,14 +499,13 @@
       try {
         const r = await fetch("/config");
         const c = await r.json();
-        // updateLangUI(c.language);
+        updateLangUI(c.language);
       } catch (e) {
         setStatus("cannot reach server", "error");
       }
     });
 
     function updateLangUI(lang) {
-      document.getElementById("lang-badge").textContent = lang;
       document.title = `Voice AI — ${lang}`;
       document.querySelectorAll(".lang-toggle-btn").forEach(btn => {
         btn.classList.toggle("active", btn.dataset.lang === lang);
