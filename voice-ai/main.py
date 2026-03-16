@@ -6,11 +6,11 @@ Voice AI MVP Backend
   GET  /health      — status check
 """
 
-import asyncio, io, os, time, logging
+import asyncio, io, json, os, time, logging
 from pathlib import Path
 
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException
-from fastapi.responses import HTMLResponse, JSONResponse, Response
+from fastapi import FastAPI, UploadFile, File, Form, Request, HTTPException
+from fastapi.responses import HTMLResponse, JSONResponse, FileResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
 from openai import AsyncOpenAI
 
@@ -261,6 +261,120 @@ async def chat(transcript: str = Form(...)):
         "tts_ms":      round(tts_ms),
         "total_ms":    round(total_ms),
     }
+
+
+# ── PWA: Static files ──────────────────────────────────────────────────────────
+
+@app.get("/manifest.json")
+async def serve_manifest():
+    return FileResponse(Path(__file__).parent / "manifest.json", media_type="application/manifest+json")
+
+@app.get("/sw.js")
+async def serve_sw():
+    return FileResponse(Path(__file__).parent / "sw.js", media_type="application/javascript",
+                        headers={"Cache-Control": "no-cache", "Service-Worker-Allowed": "/"})
+
+@app.get("/icon-192.png")
+async def serve_icon_192():
+    return FileResponse(Path(__file__).parent / "icon-192.png", media_type="image/png")
+
+@app.get("/icon-512.png")
+async def serve_icon_512():
+    return FileResponse(Path(__file__).parent / "icon-512.png", media_type="image/png")
+
+
+# ── PWA: Push Notifications ───────────────────────────────────────────────────
+
+def _get_vapid_keys():
+    """Generate VAPID keys once, store as PEM file + public key JSON."""
+    pub_path = Path(__file__).parent / ".vapid_public_key.json"
+    pem_path = Path(__file__).parent / ".vapid_private.pem"
+    if pub_path.exists() and pem_path.exists():
+        pub_data = json.loads(pub_path.read_text())
+        return {"private_pem_path": str(pem_path), "public_key": pub_data["public_key"]}
+    from py_vapid import Vapid
+    from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
+    import base64
+    vapid = Vapid()
+    vapid.generate_keys()
+    raw_pub = vapid.public_key.public_bytes(Encoding.X962, PublicFormat.UncompressedPoint)
+    public_key = base64.urlsafe_b64encode(raw_pub).decode().rstrip("=")
+    pem_path.write_bytes(vapid.private_pem())
+    pub_path.write_text(json.dumps({"public_key": public_key}))
+    return {"private_pem_path": str(pem_path), "public_key": public_key}
+
+VAPID_KEYS = _get_vapid_keys()
+_SUBS_FILE = Path(__file__).parent / ".push_subs.json"
+
+def _load_subs() -> list[dict]:
+    if _SUBS_FILE.exists():
+        return json.loads(_SUBS_FILE.read_text())
+    return []
+
+def _save_subs(subs: list[dict]):
+    _SUBS_FILE.write_text(json.dumps(subs))
+
+push_subscriptions: list[dict] = _load_subs()
+logger.info(f"Loaded {len(push_subscriptions)} push subscription(s)")
+
+
+@app.get("/vapid-public-key")
+async def vapid_public_key():
+    return {"public_key": VAPID_KEYS["public_key"]}
+
+
+@app.post("/subscribe")
+async def subscribe(request: Request):
+    sub = await request.json()
+    # Avoid duplicates by endpoint
+    endpoints = {s.get("endpoint") for s in push_subscriptions}
+    if sub.get("endpoint") not in endpoints:
+        push_subscriptions.append(sub)
+        _save_subs(push_subscriptions)
+        logger.info(f"Push subscription added ({len(push_subscriptions)} total)")
+    return {"status": "subscribed"}
+
+
+@app.post("/unsubscribe")
+async def unsubscribe(request: Request):
+    sub = await request.json()
+    push_subscriptions[:] = [s for s in push_subscriptions if s.get("endpoint") != sub.get("endpoint")]
+    _save_subs(push_subscriptions)
+    logger.info(f"Push subscription removed ({len(push_subscriptions)} total)")
+    return {"status": "unsubscribed"}
+
+
+@app.post("/send-push")
+async def send_push(request: Request):
+    """Manual trigger to send a practice reminder to all subscribers."""
+    from pywebpush import webpush, WebPushException
+    data = await request.json()
+    payload = json.dumps({
+        "title": data.get("title", "Voice AI Coach"),
+        "body": data.get("body", "Time to practice! Your language coach is ready."),
+    })
+    logger.info(f"Sending push to {len(push_subscriptions)} subscriber(s)")
+    sent = 0
+    for sub in push_subscriptions[:]:
+        try:
+            webpush(
+                subscription_info=sub,
+                data=payload,
+                vapid_private_key=VAPID_KEYS["private_pem_path"],
+                vapid_claims={
+                    "sub": "mailto:voiceai@example.com",
+                },
+            )
+            sent += 1
+            logger.info(f"Push sent OK")
+        except WebPushException as e:
+            logger.warning(f"Push failed: {e}")
+            if hasattr(e, 'response') and e.response is not None and e.response.status_code in (404, 410):
+                push_subscriptions.remove(sub)
+                _save_subs(push_subscriptions)
+        except Exception as e:
+            logger.warning(f"Push error: {type(e).__name__}: {e}")
+    return {"sent": sent, "total": len(push_subscriptions)}
 
 
 @app.delete("/history")
