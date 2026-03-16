@@ -4,6 +4,12 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Voice AI Coach</title>
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#0d1117">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Voice AI">
+<link rel="apple-touch-icon" href="/icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 <style>
@@ -112,6 +118,20 @@
     border-color: var(--gb);
   }
   .lang-toggle-btn:hover:not(.active) { color: var(--soft); }
+  #notify-btn {
+    font-size: 14px;
+    padding: 4px 8px;
+    border-radius: 6px;
+    border: 1px solid var(--line);
+    background: none;
+    cursor: pointer;
+    transition: all .15s;
+  }
+  #notify-btn.active {
+    border-color: var(--gb);
+    background: var(--gd);
+  }
+  #notify-btn:hover { border-color: var(--soft); }
 
   /* ── conversation ── */
   #conversation {
@@ -304,6 +324,7 @@
         <button class="lang-toggle-btn active" data-lang="english" onclick="switchLang('english')">EN</button>
         <button class="lang-toggle-btn" data-lang="chinese" onclick="switchLang('chinese')">中文</button>
       </div>
+      <button id="notify-btn" onclick="toggleReminder()" title="Practice reminders">🔔</button>
       <button id="clear-btn" onclick="clearHistory()">clear chat</button>
     </div>
   </header>
@@ -334,9 +355,31 @@
 
   <div class="hint">Click mic to start · Click again to send</div>
 
+  <!-- Debug log (visible on mobile) -->
+  <details id="debug-details" style="margin-top:8px">
+    <summary style="font-family:var(--mono);font-size:11px;color:var(--muted);cursor:pointer">debug log</summary>
+    <pre id="debug-log" style="font-family:var(--mono);font-size:10px;color:var(--soft);background:var(--bg1);border:1px solid var(--line);border-radius:6px;padding:8px;max-height:200px;overflow-y:auto;white-space:pre-wrap;word-break:break-all;margin-top:4px"></pre>
+  </details>
+
 </div>
 
 <script>
+// ── Debug logger (mirrors console to on-screen panel) ─────────────────────────
+const _origLog = console.log;
+const _origWarn = console.warn;
+const _origError = console.error;
+function _dbg(prefix, args) {
+  const el = document.getElementById("debug-log");
+  if (!el) return;
+  const ts = new Date().toLocaleTimeString();
+  const msg = Array.from(args).map(a => typeof a === "object" ? JSON.stringify(a) : String(a)).join(" ");
+  el.textContent += `[${ts}] ${prefix} ${msg}\n`;
+  el.scrollTop = el.scrollHeight;
+}
+console.log = function() { _origLog.apply(console, arguments); _dbg("LOG", arguments); };
+console.warn = function() { _origWarn.apply(console, arguments); _dbg("WARN", arguments); };
+console.error = function() { _origError.apply(console, arguments); _dbg("ERR", arguments); };
+
 // ── State ──────────────────────────────────────────────────────────────────────
 let mediaRecorder = null;
 let audioChunks   = [];
@@ -624,6 +667,141 @@ async function clearHistory() {
   setStatus("chat cleared");
   setTimeout(() => setStatus("ready"), 1500);
 }
+
+// ── PWA: Service Worker + Push Notifications ────────────────────────────────────
+let swRegistration = null;
+
+async function initPWA() {
+  console.log("[PWA] init start");
+  console.log("[PWA] serviceWorker supported:", "serviceWorker" in navigator);
+  console.log("[PWA] PushManager supported:", "PushManager" in window);
+  console.log("[PWA] Notification supported:", "Notification" in window);
+  console.log("[PWA] Notification.permission:", "Notification" in window ? Notification.permission : "N/A");
+
+  if (!("serviceWorker" in navigator)) {
+    console.warn("[PWA] serviceWorker NOT supported");
+    document.getElementById("notify-btn").style.display = "none";
+    return;
+  }
+  try {
+    swRegistration = await navigator.serviceWorker.register("/sw.js");
+    console.log("[PWA] SW registered, scope:", swRegistration.scope);
+    console.log("[PWA] SW state:", swRegistration.active?.state || swRegistration.installing?.state || "unknown");
+
+    // Wait for SW to be ready
+    const ready = await navigator.serviceWorker.ready;
+    console.log("[PWA] SW ready, scope:", ready.scope);
+    console.log("[PWA] pushManager available:", !!ready.pushManager);
+
+    // Update notify button state
+    const sub = await ready.pushManager.getSubscription();
+    console.log("[PWA] existing subscription:", sub ? sub.endpoint.substring(0, 60) + "..." : "none");
+    if (sub) document.getElementById("notify-btn").classList.add("active");
+  } catch (e) {
+    console.error("[PWA] SW registration failed:", e);
+  }
+
+  // Hide bell if push not supported
+  if (!("PushManager" in window)) {
+    console.warn("[PWA] PushManager NOT supported — hiding bell");
+    document.getElementById("notify-btn").style.display = "none";
+  }
+}
+
+async function toggleReminder() {
+  console.log("[PUSH] toggleReminder called");
+  console.log("[PUSH] swRegistration:", !!swRegistration);
+  console.log("[PUSH] PushManager:", "PushManager" in window);
+
+  if (!swRegistration || !("PushManager" in window)) {
+    setStatus("push not supported — open from Home Screen (HTTPS)", "error");
+    return;
+  }
+
+  const existing = await swRegistration.pushManager.getSubscription();
+  console.log("[PUSH] existing sub:", existing ? "yes" : "no");
+
+  if (existing) {
+    // Unsubscribe
+    console.log("[PUSH] unsubscribing...");
+    const ok = await existing.unsubscribe();
+    console.log("[PUSH] unsubscribe result:", ok);
+    await fetch("/unsubscribe", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ endpoint: existing.endpoint }),
+    });
+    document.getElementById("notify-btn").classList.remove("active");
+    setStatus("reminders off");
+  } else {
+    // Subscribe
+    try {
+      console.log("[PUSH] requesting permission...");
+      const permission = await Notification.requestPermission();
+      console.log("[PUSH] permission result:", permission);
+      if (permission !== "granted") {
+        setStatus("notification permission denied (" + permission + ")", "error");
+        return;
+      }
+
+      console.log("[PUSH] fetching VAPID public key...");
+      const r = await fetch("/vapid-public-key");
+      const { public_key } = await r.json();
+      console.log("[PUSH] VAPID public key:", public_key.substring(0, 20) + "...");
+
+      const applicationServerKey = urlBase64ToUint8Array(public_key);
+      console.log("[PUSH] applicationServerKey length:", applicationServerKey.length, "(should be 65)");
+
+      console.log("[PUSH] calling pushManager.subscribe...");
+      const sub = await swRegistration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: applicationServerKey,
+      });
+      console.log("[PUSH] subscription created!");
+      console.log("[PUSH] endpoint:", sub.endpoint);
+
+      const subJSON = sub.toJSON();
+      console.log("[PUSH] sub keys present:", !!subJSON.keys, "p256dh:", !!subJSON.keys?.p256dh, "auth:", !!subJSON.keys?.auth);
+
+      console.log("[PUSH] sending subscription to server...");
+      const res = await fetch("/subscribe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(subJSON),
+      });
+      const resData = await res.json();
+      console.log("[PUSH] server subscribe response:", JSON.stringify(resData));
+      if (!res.ok) throw new Error("subscribe failed: " + JSON.stringify(resData));
+
+      document.getElementById("notify-btn").classList.add("active");
+      setStatus("subscribed! sending test push...");
+
+      // Send a test notification
+      console.log("[PUSH] sending test push...");
+      const pushRes = await fetch("/send-push", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: "Voice AI Coach", body: "Notifications enabled! Time to practice." }),
+      });
+      const pushData = await pushRes.json();
+      console.log("[PUSH] send-push response:", JSON.stringify(pushData));
+      setStatus("push sent: " + pushData.sent + "/" + pushData.total + " — check notification!");
+    } catch (e) {
+      setStatus("failed: " + e.message, "error");
+      console.error("[PUSH] subscribe error:", e);
+    }
+  }
+  setTimeout(() => setStatus("ready"), 5000);
+}
+
+function urlBase64ToUint8Array(base64String) {
+  const padding = "=".repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const raw = atob(base64);
+  return Uint8Array.from([...raw].map(c => c.charCodeAt(0)));
+}
+
+initPWA();
 </script>
 </body>
 </html>
