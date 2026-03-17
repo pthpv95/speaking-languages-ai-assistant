@@ -76,6 +76,7 @@ RULES:
         "tts_voice":    "zh-CN-XiaoxiaoNeural",
         "system_prompt": """
 你是晓晴 — 风趣热情的普通话教练，来自北京。上课像和朋友聊天。
+必须全程使用简体中文回复，绝对不要用繁体字。
 
 第一轮：热情打招呼，问名字、水平（初级/中级/高级）、想提高什么。
 
@@ -172,7 +173,7 @@ RULES: Max 3 sentences + 1 lesson + 1 prompt. One roast per turn, then move on. 
             "voice": "zh-CN-XiaoxiaoNeural",
             "rate": "+12%", "pitch": "+0Hz",
             "system_prompt": """
-你是小明 — 超随和的中文朋友，来自成都。用口语、网络用语说话。低调夸（"嗯不错"），笑着纠错（"哈哈没事，大家都搞混"）。
+你是小明 — 超随和的中文朋友，来自成都。用口语、网络用语说话。低调夸（"嗯不错"），笑着纠错（"哈哈没事，大家都搞混"）。必须全程使用简体中文。
 
 第一轮：随意打招呼，问名字、水平、想练什么。
 
@@ -187,7 +188,7 @@ RULES: Max 3 sentences + 1 lesson + 1 prompt. One roast per turn, then move on. 
             "voice": "zh-CN-XiaoyiNeural",
             "rate": "+20%", "pitch": "+3Hz",
             "system_prompt": """
-你是阳阳教练 — 超级热情的中文教练！能量爆棚！庆祝一切！（"太棒了！" "厉害！" "你在开挂吧！"）错误是有趣的挑战（"好接近了！来看升级版"）。
+你是阳阳教练 — 超级热情的中文教练！能量爆棚！庆祝一切！（"太棒了！" "厉害！" "你在开挂吧！"）错误是有趣的挑战（"好接近了！来看升级版"）。必须全程使用简体中文。
 
 第一轮：最大热情打招呼，问名字、水平、想攻克什么技能。
 
@@ -202,7 +203,7 @@ RULES: Max 3 sentences + 1 lesson + 1 prompt. One roast per turn, then move on. 
             "voice": "zh-CN-YunyangNeural",
             "rate": "+8%", "pitch": "-1Hz",
             "system_prompt": """
-你是老王 — 温暖的故事大王，来自苏州。什么都让你想起一个小故事。用画面感教中文，温和幽默，冷笑话欢迎。
+你是老王 — 温暖的故事大王，来自苏州。什么都让你想起一个小故事。用画面感教中文，温和幽默，冷笑话欢迎。必须全程使用简体中文。
 
 第一轮：像老朋友打招呼，问名字、中文学习"读到哪一章了"、想要什么冒险。
 
@@ -217,7 +218,7 @@ RULES: Max 3 sentences + 1 lesson + 1 prompt. One roast per turn, then move on. 
             "voice": "zh-CN-YunxiNeural",
             "rate": "+15%", "pitch": "+1Hz",
             "system_prompt": """
-你是小辣 — 毒舌但心好的中文老师，来自东北。搞笑地怼错误（"哎呦喂，我都替你着急，来我救你"），反话夸人（"居然用对了把字句！你是谁啊！"）。绝不真的刻薄。
+你是小辣 — 毒舌但心好的中文老师，来自东北。搞笑地怼错误（"哎呦喂，我都替你着急，来我救你"），反话夸人（"居然用对了把字句！你是谁啊！"）。绝不真的刻薄。必须全程使用简体中文。
 
 第一轮：带个性打招呼，问名字、水平、先修什么。
 
@@ -243,9 +244,12 @@ p = get_profile()
 t = get_tone()
 logger.info(f"Language: {current_language} | Tone: {current_tone} ({t['label']}) | ASR: {p['asr_model']} | TTS: {t['voice']}")
 
-# ── Groq client (shared) ───────────────────────────────────────────────────────
+# ── Groq clients (shared, reuse TCP connections) ──────────────────────────────
 
 client = AsyncOpenAI(base_url="https://api.groq.com/openai/v1", api_key=GROQ_API_KEY)
+
+from openai import OpenAI as _SyncOpenAI
+sync_client = _SyncOpenAI(base_url="https://api.groq.com/openai/v1", api_key=GROQ_API_KEY)
 
 # In-memory conversation history (single user, resets on server restart)
 history: list[dict] = []
@@ -273,15 +277,49 @@ def _wav_to_mp3(wav_bytes: bytes, speed: float = 1.0) -> bytes:
     return encoder.encode(pcm) + encoder.flush()
 
 
+def _strip_for_tts(text: str) -> str:
+    """Extract only the spoken parts ([REPLY] + [PROMPT]) for TTS.
+    Skip [LESSON] block entirely — user reads it, doesn't need to hear it.
+    This dramatically cuts TTS text length and synthesis time."""
+    import re
+
+    # Try to extract [REPLY]...[LESSON] and [PROMPT]... sections
+    # Keep REPLY and PROMPT, drop LESSON
+    reply_match = re.search(r'\[REPLY\]\s*(.*?)(?=\[LESSON\]|\[PROMPT\]|$)', text, re.DOTALL | re.IGNORECASE)
+    prompt_match = re.search(r'\[PROMPT\]\s*(.*?)$', text, re.DOTALL | re.IGNORECASE)
+
+    # Chinese variants
+    if not reply_match:
+        reply_match = re.search(r'\[回复\]\s*(.*?)(?=\[课程\]|\[话题\]|$)', text, re.DOTALL)
+    if not prompt_match:
+        prompt_match = re.search(r'\[话题\]\s*(.*?)$', text, re.DOTALL)
+
+    parts = []
+    if reply_match:
+        parts.append(reply_match.group(1).strip())
+    if prompt_match:
+        parts.append(prompt_match.group(1).strip())
+
+    if parts:
+        result = ' '.join(parts)
+    else:
+        # Fallback: LLM didn't use markers, just clean up emoji/brackets
+        result = text
+
+    # Clean remaining formatting artifacts
+    result = re.sub(r'\[(?:REPLY|LESSON|PROMPT|回复|课程|话题)\]\s*', '', result)
+    result = re.sub(r'[💬🗣✏️🔊🌍]\s*', '', result)
+    return result.strip()
+
+
 async def _tts_groq(text: str, voice: str, speed: float = 1.0) -> bytes:
     """Groq Orpheus TTS — very human-sounding, English only."""
-    from openai import OpenAI
-    sync_client = OpenAI(base_url="https://api.groq.com/openai/v1", api_key=GROQ_API_KEY)
+    tts_text = _strip_for_tts(text)
     def _call():
         r = sync_client.audio.speech.create(
             model="canopylabs/orpheus-v1-english",
             voice=voice,
-            input=text,
+            input=tts_text,
             response_format="wav",
         )
         return r.read()
@@ -300,12 +338,25 @@ async def _tts_edge(text: str, voice: str, rate: str, pitch: str) -> bytes:
     return buf.getvalue()
 
 
+# Edge-tts fallback voice for English when Groq is rate-limited
+EDGE_FALLBACK = {"voice": "en-US-AriaNeural", "rate": "+15%", "pitch": "+0Hz"}
+
 async def synthesize_audio(text: str) -> bytes:
-    """Route to the right TTS engine based on current tone."""
+    """Route to the right TTS engine based on current tone.
+    Auto-falls back to edge-tts if Groq rate-limits."""
     tone = get_tone()
     engine = tone.get("tts_engine", "edge")
     if engine == "groq":
-        return await _tts_groq(text, tone["voice"], speed=tone.get("speed", 1.0))
+        try:
+            return await _tts_groq(text, tone["voice"], speed=tone.get("speed", 1.0))
+        except Exception as e:
+            if "rate_limit" in str(e) or "429" in str(e):
+                logger.warning(f"Groq TTS rate-limited, falling back to edge-tts")
+                return await _tts_edge(
+                    text, EDGE_FALLBACK["voice"],
+                    EDGE_FALLBACK["rate"], EDGE_FALLBACK["pitch"],
+                )
+            raise
     else:
         return await _tts_edge(
             text, tone["voice"],
