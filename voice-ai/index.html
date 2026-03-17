@@ -3,7 +3,7 @@
 
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1">
   <title>Voice AI Coach</title>
   <link rel="manifest" href="/manifest.json">
   <meta name="theme-color" content="#0d1117">
@@ -32,31 +32,44 @@
       --amber: #d29922;
       --mono: 'IBM Plex Mono', monospace;
       --sans: 'IBM Plex Sans', sans-serif;
+      --sidebar-w: 280px;
+      /* iOS safe areas */
+      --sat: env(safe-area-inset-top, 0px);
+      --sab: env(safe-area-inset-bottom, 0px);
+      --sal: env(safe-area-inset-left, 0px);
+      --sar: env(safe-area-inset-right, 0px);
+      /* Dynamic viewport height — falls back to vh for older browsers */
+      --app-height: 100vh;
     }
 
-    *,
-    *::before,
-    *::after {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html {
+      -webkit-text-size-adjust: 100%;
+      text-size-adjust: 100%;
     }
 
     body {
       background: var(--bg);
       color: var(--text);
       font-family: var(--sans);
-      min-height: 100vh;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
+      height: var(--app-height);
+      overflow: hidden;
+      /* Prevent iOS rubber-band overscroll */
+      overscroll-behavior: none;
+      position: fixed;
+      width: 100%;
+      -webkit-user-select: none;
+      user-select: none;
     }
+
+    /* Allow text selection in chat bubbles */
+    .bubble { -webkit-user-select: text; user-select: text; }
 
     /* subtle grid bg */
     body::before {
       content: '';
-      position: fixed;
-      inset: 0;
+      position: fixed; inset: 0;
       background-image:
         linear-gradient(rgba(63, 185, 80, .025) 1px, transparent 1px),
         linear-gradient(90deg, rgba(63, 185, 80, .025) 1px, transparent 1px);
@@ -65,31 +78,234 @@
       z-index: 0;
     }
 
+    /* ── App layout ── */
+    #app-wrapper {
+      display: flex;
+      height: var(--app-height);
+      position: relative;
+      z-index: 1;
+    }
+
+    /* ── Sidebar ── */
+    #sidebar {
+      width: var(--sidebar-w);
+      min-width: var(--sidebar-w);
+      background: var(--bg1);
+      border-right: 1px solid var(--line);
+      display: flex;
+      flex-direction: column;
+      height: var(--app-height);
+      transition: transform .25s ease;
+    }
+
+    .sidebar-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px;
+      padding-top: calc(16px + var(--sat));
+      border-bottom: 1px solid var(--line);
+      flex-shrink: 0;
+    }
+
+    .sidebar-header h2 {
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--soft);
+    }
+
+    #new-conv-btn {
+      font-family: var(--mono);
+      font-size: 12px;
+      padding: 8px 14px;
+      border-radius: 6px;
+      border: 1px solid var(--gb);
+      background: var(--gd);
+      color: var(--green);
+      cursor: pointer;
+      /* 44px touch target */
+      min-height: 36px;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    #conv-list {
+      flex: 1;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      padding: 8px;
+      padding-left: calc(8px + var(--sal));
+    }
+    #conv-list::-webkit-scrollbar { width: 4px; }
+    #conv-list::-webkit-scrollbar-thumb { background: var(--bg2); border-radius: 2px; }
+
+    .conv-item {
+      padding: 12px;
+      border-radius: 8px;
+      cursor: pointer;
+      margin-bottom: 2px;
+      border-left: 3px solid transparent;
+      /* 44px min touch target */
+      min-height: 44px;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .conv-item.active {
+      background: var(--bg2);
+      border-left-color: var(--green);
+    }
+    /* Hover only on devices that support it */
+    @media (hover: hover) {
+      .conv-item:hover { background: var(--bg2); }
+      #new-conv-btn:hover { background: var(--gb); }
+    }
+
+    .conv-title {
+      font-size: 13px;
+      color: var(--text);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      line-height: 1.4;
+    }
+
+    .conv-meta {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 4px;
+    }
+
+    .conv-lang-badge {
+      font-family: var(--mono);
+      font-size: 10px;
+      padding: 1px 6px;
+      border-radius: 8px;
+      background: var(--gd);
+      border: 1px solid var(--gb);
+      color: var(--green);
+    }
+
+    .conv-time {
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--muted);
+    }
+
+    /* Edit icon for mobile title editing */
+    .conv-edit-btn {
+      display: none;
+      background: none;
+      border: none;
+      color: var(--muted);
+      font-size: 14px;
+      padding: 4px;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+      margin-left: auto;
+      flex-shrink: 0;
+    }
+
+    .sidebar-footer {
+      padding: 12px 16px;
+      padding-bottom: calc(12px + var(--sab));
+      padding-left: calc(16px + var(--sal));
+      border-top: 1px solid var(--line);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+
+    .sidebar-footer .user-avatar {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: var(--bg2);
+      border: 1px solid var(--line);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      color: var(--soft);
+      flex-shrink: 0;
+    }
+
+    .sidebar-footer .username {
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--soft);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    /* ── Sidebar overlay (mobile) ── */
+    #sidebar-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, .5);
+      z-index: 9;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    /* ── Main area ── */
+    #main-area {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      overflow: hidden;
+      min-width: 0;
+    }
+
     .container {
       width: 100%;
       max-width: 680px;
-      padding: 32px 20px 60px;
-      position: relative;
-      z-index: 1;
+      padding: 24px 20px 8px;
+      padding-right: calc(20px + var(--sar));
       display: flex;
       flex-direction: column;
-      gap: 20px;
+      gap: 14px;
+      flex: 1;
+      overflow: hidden;
     }
 
     /* ── header ── */
     header {
       display: flex;
       align-items: center;
-      flex-wrap: wrap;
       gap: 10px;
       border-bottom: 1px solid var(--line);
-      padding-bottom: 12px;
+      padding-bottom: 10px;
+      padding-top: var(--sat);
+      flex-shrink: 0;
+    }
+
+    #hamburger {
+      display: none;
+      background: none;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      color: var(--soft);
+      font-size: 18px;
+      padding: 6px 10px;
+      cursor: pointer;
+      line-height: 1;
+      min-width: 44px;
+      min-height: 44px;
+      align-items: center;
+      justify-content: center;
+      -webkit-tap-highlight-color: transparent;
     }
 
     header h1 {
-      font-size: 17px;
+      font-size: 16px;
       font-weight: 600;
       color: var(--text);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      min-width: 0;
     }
 
     .header-right {
@@ -97,66 +313,76 @@
       display: flex;
       gap: 6px;
       align-items: center;
+      flex-shrink: 0;
     }
 
-    #clear-btn,
-    .lang-toggle-btn {
-      font-family: var(--mono);
-      font-size: 11px;
-      padding: 4px 10px;
-      border-radius: 6px;
-      border: 1px solid var(--line);
-      background: none;
-      color: var(--muted);
-      cursor: pointer;
-      transition: color .15s, border-color .15s;
-    }
-
-    #clear-btn:hover {
-      color: var(--red);
-      border-color: var(--red);
-    }
-
-    /* language toggle */
     .lang-toggle {
       display: flex;
       border: 1px solid var(--line);
       border-radius: 6px;
       overflow: hidden;
     }
-
     .lang-toggle-btn {
+      font-family: var(--mono);
+      font-size: 12px;
+      padding: 6px 14px;
       border: none;
-      border-radius: 0;
-      padding: 4px 12px;
       border-right: 1px solid var(--line);
+      background: none;
+      color: var(--muted);
+      cursor: pointer;
+      transition: color .15s, background .15s;
+      /* 44px touch target */
+      min-height: 36px;
+      -webkit-tap-highlight-color: transparent;
     }
-
-    .lang-toggle-btn:last-child {
-      border-right: none;
-    }
-
+    .lang-toggle-btn:last-child { border-right: none; }
     .lang-toggle-btn.active {
       background: var(--gd);
       color: var(--green);
-      border-color: var(--gb);
+    }
+    @media (hover: hover) {
+      .lang-toggle-btn:hover:not(.active) { color: var(--soft); }
     }
 
-    .lang-toggle-btn:hover:not(.active) {
-      color: var(--soft);
+    #notify-btn {
+      font-size: 16px;
+      padding: 6px 10px;
+      border-radius: 6px;
+      border: 1px solid var(--line);
+      background: none;
+      cursor: pointer;
+      min-width: 44px;
+      min-height: 36px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      -webkit-tap-highlight-color: transparent;
+    }
+    #notify-btn.active { border-color: var(--gb); background: var(--gd); }
+    @media (hover: hover) {
+      #notify-btn:hover { border-color: var(--soft); }
     }
 
-    /* tone selector */
+    /* tone selector — horizontal scroll on mobile */
     .tone-bar {
       display: flex;
       gap: 6px;
-      flex-wrap: wrap;
+      flex-shrink: 0;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      /* Hide scrollbar but keep functionality */
+      scrollbar-width: none;
+      -ms-overflow-style: none;
+      /* Pad for scroll edges */
+      padding-bottom: 2px;
     }
+    .tone-bar::-webkit-scrollbar { display: none; }
 
     .tone-btn {
       font-family: var(--mono);
-      font-size: 11px;
-      padding: 5px 12px;
+      font-size: 12px;
+      padding: 8px 14px;
       border-radius: 16px;
       border: 1px solid var(--line);
       background: none;
@@ -164,36 +390,18 @@
       cursor: pointer;
       transition: all .2s;
       white-space: nowrap;
+      flex-shrink: 0;
+      /* 44px touch target */
+      min-height: 36px;
+      -webkit-tap-highlight-color: transparent;
     }
-
-    .tone-btn:hover:not(.active) {
-      color: var(--soft);
-      border-color: var(--soft);
-    }
-
     .tone-btn.active {
       background: var(--gd);
       color: var(--green);
       border-color: var(--gb);
     }
-
-    #notify-btn {
-      font-size: 14px;
-      padding: 4px 8px;
-      border-radius: 6px;
-      border: 1px solid var(--line);
-      background: none;
-      cursor: pointer;
-      transition: all .15s;
-    }
-
-    #notify-btn.active {
-      border-color: var(--gb);
-      background: var(--gd);
-    }
-
-    #notify-btn:hover {
-      border-color: var(--soft);
+    @media (hover: hover) {
+      .tone-btn:hover:not(.active) { color: var(--soft); border-color: var(--soft); }
     }
 
     /* ── conversation ── */
@@ -201,63 +409,45 @@
       display: flex;
       flex-direction: column;
       gap: 12px;
-      min-height: 240px;
-      max-height: 52vh;
+      flex: 1;
       overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
       padding: 4px 2px;
       scroll-behavior: smooth;
+      /* Ensure content doesn't go under safe areas */
+      min-height: 0;
     }
-
-    #conversation::-webkit-scrollbar {
-      width: 4px;
-    }
-
-    #conversation::-webkit-scrollbar-track {
-      background: transparent;
-    }
-
-    #conversation::-webkit-scrollbar-thumb {
-      background: var(--bg2);
-      border-radius: 2px;
-    }
+    #conversation::-webkit-scrollbar { width: 4px; }
+    #conversation::-webkit-scrollbar-track { background: transparent; }
+    #conversation::-webkit-scrollbar-thumb { background: var(--bg2); border-radius: 2px; }
 
     .bubble {
-      max-width: 82%;
-      padding: 11px 15px;
-      border-radius: 12px;
-      font-size: 14px;
-      line-height: 1.65;
+      max-width: 85%;
+      padding: 12px 16px;
+      border-radius: 14px;
+      font-size: 15px;
+      line-height: 1.6;
       animation: popIn .2s ease both;
+      word-break: break-word;
     }
-
     @keyframes popIn {
-      from {
-        opacity: 0;
-        transform: translateY(6px) scale(.97);
-      }
-
-      to {
-        opacity: 1;
-        transform: translateY(0) scale(1);
-      }
+      from { opacity: 0; transform: translateY(6px) scale(.97); }
+      to { opacity: 1; transform: translateY(0) scale(1); }
     }
-
     .bubble.user {
       align-self: flex-end;
       background: var(--bg2);
       border: 1px solid var(--line);
       color: var(--text);
-      border-bottom-right-radius: 3px;
+      border-bottom-right-radius: 4px;
     }
-
     .bubble.ai {
       align-self: flex-start;
       background: var(--gd);
       border: 1px solid var(--gb);
       color: var(--text);
-      border-bottom-left-radius: 3px;
+      border-bottom-left-radius: 4px;
     }
-
     .bubble.ai .tip {
       color: var(--green);
       font-family: var(--mono);
@@ -266,13 +456,84 @@
       display: block;
     }
 
+    /* Collapsible lesson block */
+    .lesson-toggle {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 10px;
+      padding: 6px 10px;
+      background: rgba(63, 185, 80, .08);
+      border: 1px solid var(--gb);
+      border-radius: 8px;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+      min-height: 36px;
+    }
+    .lesson-toggle-label {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--green);
+      flex: 1;
+    }
+    .lesson-toggle-arrow {
+      font-size: 10px;
+      color: var(--green);
+      transition: transform .2s;
+    }
+    .lesson-toggle.open .lesson-toggle-arrow {
+      transform: rotate(180deg);
+    }
+    .lesson-content {
+      display: none;
+      margin-top: 8px;
+      padding: 8px 10px;
+      background: rgba(63, 185, 80, .05);
+      border-radius: 6px;
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--green);
+      line-height: 1.6;
+    }
+    .lesson-content.open {
+      display: block;
+    }
+
+    /* Replay button */
+    .replay-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      border: 1px solid var(--gb);
+      background: rgba(63, 185, 80, .08);
+      color: var(--green);
+      font-size: 14px;
+      cursor: pointer;
+      margin-top: 8px;
+      -webkit-tap-highlight-color: transparent;
+      -webkit-touch-callout: none;
+      transition: background .15s, opacity .15s;
+      line-height: 1;
+    }
+    .replay-btn:active { background: var(--gb); }
+    .replay-btn.loading {
+      opacity: .5;
+      pointer-events: none;
+    }
+    @media (hover: hover) {
+      .replay-btn:hover { background: var(--gb); }
+    }
+
     .bubble.error {
       align-self: flex-start;
       background: rgba(248, 81, 73, .07);
       border: 1px solid rgba(248, 81, 73, .25);
       color: var(--red);
       font-family: var(--mono);
-      font-size: 12px;
+      font-size: 13px;
     }
 
     .empty-state {
@@ -280,16 +541,13 @@
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      gap: 8px;
+      gap: 10px;
       height: 200px;
       color: var(--muted);
-      font-size: 13px;
+      font-size: 14px;
       font-family: var(--mono);
     }
-
-    .empty-state span:first-child {
-      font-size: 28px;
-    }
+    .empty-state span:first-child { font-size: 32px; }
 
     /* ── latency badge ── */
     .latency-badge {
@@ -303,57 +561,51 @@
       margin-top: -6px;
       margin-left: 6px;
     }
-
-    .latency-badge.fast {
-      color: var(--green);
-    }
-
-    .latency-badge.ok {
-      color: var(--amber);
-    }
-
-    .latency-badge.slow {
-      color: var(--red);
-    }
+    .latency-badge.fast { color: var(--green); }
+    .latency-badge.ok { color: var(--amber); }
+    .latency-badge.slow { color: var(--red); }
 
     /* ── record controls ── */
     .controls {
       display: flex;
       flex-direction: column;
       align-items: center;
-      gap: 14px;
-      padding: 20px 0 4px;
+      gap: 4px;
+      padding: 6px 0;
+      padding-bottom: var(--sab);
+      flex-shrink: 0;
     }
 
     #record-btn {
-      width: 72px;
-      height: 72px;
+      width: 56px; height: 56px;
       border-radius: 50%;
       border: 2px solid var(--green);
       background: var(--gd);
       color: var(--green);
-      font-size: 26px;
+      font-size: 22px;
       cursor: pointer;
       transition: all .2s;
-      display: flex;
-      align-items: center;
-      justify-content: center;
+      display: flex; align-items: center; justify-content: center;
       box-shadow: 0 0 0 0 rgba(63, 185, 80, 0);
-      position: relative;
+      -webkit-tap-highlight-color: transparent;
+      /* Prevent iOS callout */
+      -webkit-touch-callout: none;
     }
-
-    #record-btn:hover:not(:disabled) {
-      background: var(--gb);
-      box-shadow: 0 0 0 6px rgba(63, 185, 80, .12);
+    @media (hover: hover) {
+      #record-btn:hover:not(:disabled) {
+        background: var(--gb);
+        box-shadow: 0 0 0 6px rgba(63, 185, 80, .12);
+      }
     }
-
+    #record-btn:active:not(:disabled) {
+      transform: scale(.95);
+    }
     #record-btn.recording {
       border-color: var(--red);
       background: rgba(248, 81, 73, .12);
       color: var(--red);
       animation: pulse 1.4s ease infinite;
     }
-
     #record-btn:disabled {
       border-color: var(--muted);
       background: var(--bg2);
@@ -361,53 +613,30 @@
       cursor: not-allowed;
       animation: none;
     }
-
     @keyframes pulse {
-
-      0%,
-      100% {
-        box-shadow: 0 0 0 0 rgba(248, 81, 73, .4);
-      }
-
-      50% {
-        box-shadow: 0 0 0 10px rgba(248, 81, 73, 0);
-      }
+      0%, 100% { box-shadow: 0 0 0 0 rgba(248, 81, 73, .4); }
+      50% { box-shadow: 0 0 0 10px rgba(248, 81, 73, 0); }
     }
 
-    /* recording timer */
     #timer {
       font-family: var(--mono);
-      font-size: 13px;
+      font-size: 12px;
       color: var(--red);
-      min-height: 20px;
       letter-spacing: 1px;
     }
+    #timer:empty { display: none; }
 
     #status {
       font-family: var(--mono);
       font-size: 11px;
       color: var(--muted);
-      min-height: 16px;
       letter-spacing: .5px;
     }
+    #status:empty { display: none; }
+    #status.active { color: var(--green); }
+    #status.error { color: var(--red); }
 
-    #status.active {
-      color: var(--green);
-    }
-
-    #status.error {
-      color: var(--red);
-    }
-
-    /* ── instruction line ── */
-    .hint {
-      text-align: center;
-      font-size: 12px;
-      color: var(--muted);
-      font-family: var(--mono);
-    }
-
-    /* ── pipeline viz (shown while processing) ── */
+    /* ── pipeline viz ── */
     #pipeline {
       display: none;
       gap: 6px;
@@ -415,12 +644,9 @@
       align-items: center;
       font-family: var(--mono);
       font-size: 11px;
+      flex-shrink: 0;
     }
-
-    #pipeline.visible {
-      display: flex;
-    }
-
+    #pipeline.visible { display: flex; }
     .pipe-step {
       padding: 3px 10px;
       border-radius: 4px;
@@ -429,579 +655,1015 @@
       background: var(--bg1);
       transition: all .2s;
     }
+    .pipe-step.active { border-color: var(--amber); color: var(--amber); background: #2a1f07; }
+    .pipe-step.done { border-color: var(--green); color: var(--green); background: var(--gd); }
+    .pipe-arrow { color: var(--muted); font-size: 10px; }
 
-    .pipe-step.active {
-      border-color: var(--amber);
-      color: var(--amber);
-      background: var(--amber-d, #2a1f07);
+    /* ── Username modal ── */
+    #username-modal {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 100;
+      background: rgba(0, 0, 0, .6);
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      /* Allow modal to scroll if keyboard pushes it */
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+    #username-modal.visible { display: flex; }
+
+    .modal-box {
+      background: var(--bg1);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 32px 24px;
+      width: 360px;
+      max-width: 100%;
+      text-align: center;
+    }
+    .modal-box h2 {
+      font-size: 22px;
+      margin-bottom: 8px;
+    }
+    .modal-box p {
+      font-size: 14px;
+      color: var(--soft);
+      margin-bottom: 24px;
+    }
+    .modal-box input {
+      width: 100%;
+      padding: 12px 16px;
+      border-radius: 10px;
+      border: 1px solid var(--line);
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--sans);
+      /* 16px prevents iOS zoom on focus */
+      font-size: 16px;
+      outline: none;
+      margin-bottom: 16px;
+      -webkit-appearance: none;
+      appearance: none;
+    }
+    .modal-box input:focus { border-color: var(--green); }
+    .modal-box button {
+      width: 100%;
+      padding: 14px;
+      border-radius: 10px;
+      border: none;
+      background: var(--green);
+      color: var(--bg);
+      font-family: var(--sans);
+      font-size: 16px;
+      font-weight: 500;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+      -webkit-appearance: none;
+      appearance: none;
+    }
+    .modal-box button:active { opacity: .85; }
+    .modal-box button:disabled { opacity: .5; cursor: not-allowed; }
+
+    /* ── Responsive (mobile < 768px) ── */
+    @media (max-width: 768px) {
+      #sidebar {
+        position: fixed;
+        left: 0; top: 0;
+        z-index: 10;
+        transform: translateX(-100%);
+        /* Full height including safe areas */
+        height: var(--app-height);
+      }
+      #sidebar.open { transform: translateX(0); }
+      #sidebar-overlay.visible { display: block; }
+      #hamburger { display: flex; }
+
+      .container {
+        padding: 12px 14px 8px;
+        padding-right: calc(14px + var(--sar));
+        padding-left: calc(14px + var(--sal));
+        gap: 10px;
+      }
+
+      header {
+        gap: 8px;
+        padding-bottom: 8px;
+      }
+
+      header h1 { font-size: 15px; }
+
+      .bubble { max-width: 88%; font-size: 15px; }
+
+      .empty-state { height: 140px; }
+
+      /* Show edit button on mobile instead of dblclick */
+      .conv-edit-btn { display: block; }
+
+      .controls {
+        gap: 4px;
+        padding: 4px 0;
+        padding-bottom: var(--sab);
+      }
     }
 
-    .pipe-step.done {
-      border-color: var(--green);
-      color: var(--green);
-      background: var(--gd);
+    /* ── Small phones (iPhone SE, etc.) ── */
+    @media (max-width: 380px) {
+      .container { padding: 8px 10px 4px; gap: 8px; }
+      header h1 { font-size: 14px; }
+      #record-btn { width: 52px; height: 52px; font-size: 20px; }
+      .bubble { font-size: 14px; padding: 10px 14px; }
+      .tone-btn { font-size: 11px; padding: 6px 10px; }
     }
 
-    .pipe-arrow {
-      color: var(--muted);
-      font-size: 10px;
+    /* ── Landscape phone ── */
+    @media (max-height: 500px) and (orientation: landscape) {
+      .controls { padding: 4px 0; gap: 4px; }
+      #record-btn { width: 48px; height: 48px; font-size: 18px; }
+      #timer { min-height: 14px; font-size: 11px; }
     }
   </style>
 </head>
 
 <body>
-  <div class="container">
 
-    <header>
-      <h1>🎙️ Voice AI Coach</h1>
-      <div class="header-right">
-        <div class="lang-toggle" id="lang-toggle">
-          <button class="lang-toggle-btn active" data-lang="english" onclick="switchLang('english')">EN</button>
-          <button class="lang-toggle-btn" data-lang="chinese" onclick="switchLang('chinese')">中文</button>
-        </div>
-        <button id="notify-btn" onclick="toggleReminder()" title="Practice reminders">🔔</button>
-        <button id="clear-btn" onclick="clearHistory()">clear chat</button>
-      </div>
-    </header>
+<!-- Username modal -->
+<div id="username-modal">
+  <div class="modal-box">
+    <h2>Welcome</h2>
+    <p>Enter your name to start practicing</p>
+    <input type="text" id="username-input" placeholder="Your name" maxlength="30" autocomplete="off"
+      enterkeyhint="go">
+    <button id="username-submit" onclick="submitUsername()">Start</button>
+  </div>
+</div>
 
-    <!-- Tone selector -->
-    <div class="tone-bar" id="tone-bar"></div>
-
-    <!-- Conversation -->
-    <div id="conversation">
-      <div class="empty-state" id="empty">
-        <span>🎤</span>
-        <span>Click the mic to start speaking</span>
-      </div>
+<div id="app-wrapper">
+  <!-- Sidebar -->
+  <div id="sidebar">
+    <div class="sidebar-header">
+      <h2>Conversations</h2>
+      <button id="new-conv-btn" onclick="newConversation()">+ New</button>
     </div>
-
-    <!-- Pipeline status -->
-    <div id="pipeline">
-      <span class="pipe-step" id="step-asr">ASR</span>
-      <span class="pipe-arrow">→</span>
-      <span class="pipe-step" id="step-llm">LLM</span>
-      <span class="pipe-arrow">→</span>
-      <span class="pipe-step" id="step-tts">TTS</span>
+    <div id="conv-list"></div>
+    <div class="sidebar-footer">
+      <div class="user-avatar" id="user-avatar"></div>
+      <span class="username" id="sidebar-username"></span>
     </div>
-
-    <!-- Controls -->
-    <div class="controls">
-      <button id="record-btn" onclick="toggleRecord()">🎤</button>
-      <div id="timer"></div>
-      <div id="status">ready</div>
-    </div>
-
-    <div class="hint">Click mic to start · Click again to send</div>
-
-    <!-- Debug log (visible on mobile) — uncomment to enable
-    <details id="debug-details" style="margin-top:8px">
-      <summary style="font-family:var(--mono);font-size:11px;color:var(--muted);cursor:pointer">debug log</summary>
-      <pre id="debug-log"
-        style="font-family:var(--mono);font-size:10px;color:var(--soft);background:var(--bg1);border:1px solid var(--line);border-radius:6px;padding:8px;max-height:200px;overflow-y:auto;white-space:pre-wrap;word-break:break-all;margin-top:4px"></pre>
-    </details>
-    -->
-
   </div>
 
-  <script>
-    // ── Debug logger (mirrors console to on-screen panel) ─────────────────────────
-    const _origLog = console.log;
-    const _origWarn = console.warn;
-    const _origError = console.error;
-    function _dbg(prefix, args) {
-      const el = document.getElementById("debug-log");
-      if (!el) return;
-      const ts = new Date().toLocaleTimeString();
-      const msg = Array.from(args).map(a => typeof a === "object" ? JSON.stringify(a) : String(a)).join(" ");
-      el.textContent += `[${ts}] ${prefix} ${msg}\n`;
-      el.scrollTop = el.scrollHeight;
+  <!-- Sidebar overlay (mobile) -->
+  <div id="sidebar-overlay" onclick="closeSidebar()"></div>
+
+  <!-- Main area -->
+  <div id="main-area">
+    <div class="container">
+
+      <header>
+        <button id="hamburger" onclick="toggleSidebar()">&#9776;</button>
+        <h1>Voice AI Coach</h1>
+        <div class="header-right">
+          <div class="lang-toggle" id="lang-toggle"></div>
+          <button id="notify-btn" onclick="toggleReminder()" title="Practice reminders">&#x1F514;</button>
+        </div>
+      </header>
+
+      <!-- Tone selector -->
+      <div class="tone-bar" id="tone-bar"></div>
+
+      <!-- Conversation -->
+      <div id="conversation">
+        <div class="empty-state" id="empty">
+          <span>&#x1F3A4;</span>
+          <span>Tap the mic to start speaking</span>
+        </div>
+      </div>
+
+      <!-- Pipeline status -->
+      <div id="pipeline">
+        <span class="pipe-step" id="step-asr">ASR</span>
+        <span class="pipe-arrow">&rarr;</span>
+        <span class="pipe-step" id="step-llm">LLM</span>
+        <span class="pipe-arrow">&rarr;</span>
+        <span class="pipe-step" id="step-tts">TTS</span>
+      </div>
+
+      <!-- Controls -->
+      <div class="controls">
+        <button id="record-btn" onclick="toggleRecord()">&#x1F3A4;</button>
+        <div id="timer"></div>
+        <div id="status"></div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+// ── iOS viewport height fix ───────────────────────────────────────────────────
+// 100vh on iOS Safari includes the URL bar area. This JS sets a CSS variable
+// to the actual visible height and updates on resize/orientation change.
+function setAppHeight() {
+  document.documentElement.style.setProperty('--app-height', window.innerHeight + 'px');
+}
+setAppHeight();
+window.addEventListener('resize', setAppHeight);
+window.addEventListener('orientationchange', () => {
+  // iOS needs a slight delay after orientation change
+  setTimeout(setAppHeight, 100);
+});
+
+// Prevent iOS Safari bounce/pull-to-refresh on the body
+document.body.addEventListener('touchmove', function(e) {
+  // Only prevent on body itself, not on scrollable children
+  if (e.target === document.body) e.preventDefault();
+}, { passive: false });
+
+// ── State ──────────────────────────────────────────────────────────────────────
+const state = {
+  username: localStorage.getItem('voiceai_username'),
+  conversations: [],
+  currentConvId: null,
+  currentLanguage: 'chinese',
+  currentTone: 'hype',
+  availableTones: {},
+  availableLanguages: [],
+};
+
+let mediaRecorder = null;
+let audioChunks = [];
+let recording = false;
+let timerInterval = null;
+let timerSeconds = 0;
+let activeAudio = null;
+let unlockedAudio = null;
+
+// ── API helper ────────────────────────────────────────────────────────────────
+async function api(path, opts = {}) {
+  const headers = opts.headers || {};
+  if (state.username) {
+    headers['X-Username'] = state.username;
+  }
+  opts.headers = headers;
+  const r = await fetch(path, opts);
+  if (r.status === 401) {
+    showUsernameModal();
+    throw new Error('login required');
+  }
+  return r;
+}
+
+// ── Init ───────────────────────────────────────────────────────────────────────
+window.addEventListener("DOMContentLoaded", async () => {
+  if (!state.username) {
+    showUsernameModal();
+    return;
+  }
+  await initApp();
+});
+
+async function initApp() {
+  try {
+    const r = await fetch("/config");
+    const c = await r.json();
+    state.availableLanguages = c.available_languages;
+    state.availableTones = c.available_tones;
+
+    renderLangToggle();
+
+    await loadConversations();
+
+    if (state.conversations.length === 0) {
+      await newConversation();
+    } else {
+      await selectConversation(state.conversations[0].id);
     }
-    console.log = function () { _origLog.apply(console, arguments); _dbg("LOG", arguments); };
-    console.warn = function () { _origWarn.apply(console, arguments); _dbg("WARN", arguments); };
-    console.error = function () { _origError.apply(console, arguments); _dbg("ERR", arguments); };
 
-    // ── State ──────────────────────────────────────────────────────────────────────
-    let mediaRecorder = null;
-    let audioChunks = [];
-    let recording = false;
-    let timerInterval = null;
-    let timerSeconds = 0;
-    let activeAudio = null;
-    let unlockedAudio = null; // pre-unlocked Audio for iOS PWA
+    updateSidebarFooter();
+  } catch (e) {
+    setStatus("cannot reach server", "error");
+  }
+}
 
-    // ── Init ───────────────────────────────────────────────────────────────────────
-    let currentTone = "chill";
+// ── Username modal ────────────────────────────────────────────────────────────
+function showUsernameModal() {
+  document.getElementById('username-modal').classList.add('visible');
+  // Delay focus — iOS needs the modal to be visible first
+  setTimeout(() => document.getElementById('username-input').focus(), 300);
+}
 
-    window.addEventListener("DOMContentLoaded", async () => {
-      try {
-        const r = await fetch("/config");
-        const c = await r.json();
-        currentTone = c.tone || "chill";
-        updateLangUI(c.language);
-        renderToneBar(c.available_tones, c.tone);
-      } catch (e) {
-        setStatus("cannot reach server", "error");
+document.addEventListener('DOMContentLoaded', () => {
+  const input = document.getElementById('username-input');
+  if (input) {
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        input.blur(); // dismiss iOS keyboard
+        submitUsername();
       }
     });
+  }
+});
 
-    function updateLangUI(lang) {
-      document.title = `Voice AI — ${lang}`;
-      document.querySelectorAll(".lang-toggle-btn").forEach(btn => {
-        btn.classList.toggle("active", btn.dataset.lang === lang);
+async function submitUsername() {
+  const input = document.getElementById('username-input');
+  const name = input.value.trim();
+  if (!name) return;
+
+  const btn = document.getElementById('username-submit');
+  btn.disabled = true;
+  btn.textContent = 'Starting...';
+
+  try {
+    const r = await fetch('/api/users', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: name }),
+    });
+    if (!r.ok) throw new Error(await r.text());
+
+    state.username = name;
+    localStorage.setItem('voiceai_username', name);
+    document.getElementById('username-modal').classList.remove('visible');
+    await initApp();
+  } catch (e) {
+    btn.textContent = 'Error — try again';
+    setTimeout(() => { btn.textContent = 'Start'; btn.disabled = false; }, 2000);
+  }
+}
+
+// ── Sidebar ───────────────────────────────────────────────────────────────────
+function toggleSidebar() {
+  const sidebar = document.getElementById('sidebar');
+  const overlay = document.getElementById('sidebar-overlay');
+  const isOpen = sidebar.classList.toggle('open');
+  overlay.classList.toggle('visible', isOpen);
+  // Prevent body scroll when sidebar is open
+  document.body.style.overflow = isOpen ? 'hidden' : '';
+}
+
+function closeSidebar() {
+  document.getElementById('sidebar').classList.remove('open');
+  document.getElementById('sidebar-overlay').classList.remove('visible');
+  document.body.style.overflow = '';
+}
+
+function updateSidebarFooter() {
+  const avatar = document.getElementById('user-avatar');
+  const nameEl = document.getElementById('sidebar-username');
+  if (state.username) {
+    avatar.textContent = state.username[0].toUpperCase();
+    nameEl.textContent = state.username;
+  }
+}
+
+async function loadConversations() {
+  const r = await api('/api/conversations');
+  state.conversations = await r.json();
+  renderConvList();
+}
+
+function renderConvList() {
+  const list = document.getElementById('conv-list');
+  list.innerHTML = '';
+  for (const conv of state.conversations) {
+    const item = document.createElement('div');
+    item.className = 'conv-item' + (conv.id === state.currentConvId ? ' active' : '');
+    item.dataset.id = conv.id;
+
+    const titleRow = document.createElement('div');
+    titleRow.style.cssText = 'display:flex;align-items:center;gap:4px;';
+
+    const title = document.createElement('div');
+    title.className = 'conv-title';
+    title.textContent = conv.title;
+    title.style.flex = '1';
+    title.style.minWidth = '0';
+
+    // Desktop: double-click to edit
+    title.addEventListener('dblclick', (e) => {
+      e.stopPropagation();
+      startTitleEdit(item, conv.id, title);
+    });
+
+    // Mobile: edit button (visible via CSS on mobile)
+    const editBtn = document.createElement('button');
+    editBtn.className = 'conv-edit-btn';
+    editBtn.innerHTML = '&#x270E;';
+    editBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      startTitleEdit(item, conv.id, title);
+    });
+
+    titleRow.appendChild(title);
+    titleRow.appendChild(editBtn);
+
+    const meta = document.createElement('div');
+    meta.className = 'conv-meta';
+
+    const badge = document.createElement('span');
+    badge.className = 'conv-lang-badge';
+    badge.textContent = conv.language;
+
+    const time = document.createElement('span');
+    time.className = 'conv-time';
+    time.textContent = relativeTime(conv.updated_at);
+
+    meta.appendChild(badge);
+    meta.appendChild(time);
+    item.appendChild(titleRow);
+    item.appendChild(meta);
+
+    item.addEventListener('click', () => {
+      selectConversation(conv.id);
+      closeSidebar();
+    });
+
+    list.appendChild(item);
+  }
+}
+
+function startTitleEdit(item, convId, titleEl) {
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.value = titleEl.textContent;
+  // 16px to prevent iOS zoom
+  input.style.cssText = 'width:100%;padding:4px 8px;background:var(--bg);color:var(--text);border:1px solid var(--green);border-radius:6px;font-size:16px;font-family:var(--sans);outline:none;min-height:36px;';
+
+  titleEl.replaceWith(input);
+  input.focus();
+  input.select();
+
+  let saved = false;
+  const save = async () => {
+    if (saved) return;
+    saved = true;
+    const newTitle = input.value.trim() || 'New conversation';
+    const newEl = document.createElement('div');
+    newEl.className = 'conv-title';
+    newEl.style.flex = '1';
+    newEl.style.minWidth = '0';
+    newEl.textContent = newTitle;
+    newEl.addEventListener('dblclick', (e) => {
+      e.stopPropagation();
+      startTitleEdit(item, convId, newEl);
+    });
+    input.replaceWith(newEl);
+    await api(`/api/conversations/${convId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: newTitle }),
+    });
+    const c = state.conversations.find(x => x.id === convId);
+    if (c) c.title = newTitle;
+  };
+
+  input.addEventListener('blur', save);
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
+    if (e.key === 'Escape') { input.value = titleEl.textContent; input.blur(); }
+  });
+}
+
+async function selectConversation(convId) {
+  state.currentConvId = convId;
+
+  const r = await api(`/api/conversations/${convId}`);
+  const data = await r.json();
+
+  state.currentLanguage = data.language;
+  state.currentTone = data.tone;
+
+  updateLangUI(data.language);
+  renderToneBar();
+  renderMessages(data.messages);
+  renderConvList();
+}
+
+async function newConversation() {
+  const r = await api('/api/conversations', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      language: state.currentLanguage,
+      tone: state.currentTone,
+    }),
+  });
+  const conv = await r.json();
+  state.conversations.unshift(conv);
+  await selectConversation(conv.id);
+  closeSidebar();
+}
+
+function renderMessages(messages) {
+  const conv = document.getElementById('conversation');
+  conv.innerHTML = '';
+  if (!messages || messages.length === 0) {
+    conv.innerHTML = '<div class="empty-state" id="empty"><span>&#x1F3A4;</span><span>Tap the mic to start speaking</span></div>';
+    return;
+  }
+  for (const msg of messages) {
+    addBubble(msg.role === 'assistant' ? 'ai' : 'user', msg.content, false);
+  }
+  // Use requestAnimationFrame to ensure DOM is rendered before scrolling
+  requestAnimationFrame(() => { conv.scrollTop = conv.scrollHeight; });
+}
+
+// ── Language & Tone ───────────────────────────────────────────────────────────
+function renderLangToggle() {
+  const container = document.getElementById('lang-toggle');
+  container.innerHTML = '';
+  const labels = { english: 'EN', chinese: '中文' };
+  for (const lang of state.availableLanguages) {
+    const btn = document.createElement('button');
+    btn.className = 'lang-toggle-btn' + (lang === state.currentLanguage ? ' active' : '');
+    btn.textContent = labels[lang] || lang;
+    btn.dataset.lang = lang;
+    btn.onclick = () => switchLang(lang);
+    container.appendChild(btn);
+  }
+}
+
+function updateLangUI(lang) {
+  state.currentLanguage = lang;
+  document.title = `Voice AI — ${lang}`;
+  document.querySelectorAll('.lang-toggle-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.lang === lang);
+  });
+}
+
+function renderToneBar() {
+  const bar = document.getElementById('tone-bar');
+  bar.innerHTML = '';
+  const tones = state.availableTones[state.currentLanguage] || {};
+  for (const [key, label] of Object.entries(tones)) {
+    const btn = document.createElement('button');
+    btn.className = 'tone-btn' + (key === state.currentTone ? ' active' : '');
+    btn.textContent = label;
+    btn.dataset.tone = key;
+    btn.onclick = () => switchTone(key);
+    bar.appendChild(btn);
+  }
+}
+
+async function switchLang(lang) {
+  if (lang === state.currentLanguage || !state.currentConvId) return;
+  if (activeAudio) { activeAudio.pause(); activeAudio = null; }
+
+  setStatus('switching language...');
+  try {
+    await api(`/api/conversations/${state.currentConvId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ language: lang, tone: 'hype' }),
+    });
+    state.currentLanguage = lang;
+    state.currentTone = 'hype';
+    updateLangUI(lang);
+    renderToneBar();
+    const c = state.conversations.find(x => x.id === state.currentConvId);
+    if (c) { c.language = lang; c.tone = 'hype'; }
+    renderConvList();
+    setStatus('');
+  } catch (e) {
+    setStatus('switch failed', 'error');
+  }
+}
+
+async function switchTone(tone) {
+  if (tone === state.currentTone || !state.currentConvId) return;
+  if (activeAudio) { activeAudio.pause(); activeAudio = null; }
+
+  setStatus('switching tone...');
+  try {
+    await api(`/api/conversations/${state.currentConvId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tone: tone }),
+    });
+    state.currentTone = tone;
+    document.querySelectorAll('.tone-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.tone === tone);
+    });
+    const c = state.conversations.find(x => x.id === state.currentConvId);
+    if (c) c.tone = tone;
+    setStatus('');
+  } catch (e) {
+    setStatus('tone switch failed', 'error');
+  }
+}
+
+// ── Record toggle ──────────────────────────────────────────────────────────────
+async function toggleRecord() {
+  if (recording) stopRecording();
+  else await startRecording();
+}
+
+async function startRecording() {
+  if (activeAudio) { activeAudio.pause(); activeAudio = null; }
+
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  } catch (e) {
+    setStatus("mic permission denied", "error");
+    return;
+  }
+
+  // iOS Safari: prefer mp4/aac; Chrome/Firefox: prefer webm/opus
+  let mimeType = '';
+  if (MediaRecorder.isTypeSupported("audio/webm;codecs=opus")) {
+    mimeType = "audio/webm;codecs=opus";
+  } else if (MediaRecorder.isTypeSupported("audio/webm")) {
+    mimeType = "audio/webm";
+  } else if (MediaRecorder.isTypeSupported("audio/mp4")) {
+    mimeType = "audio/mp4";
+  }
+
+  mediaRecorder = new MediaRecorder(stream, mimeType ? { mimeType } : {});
+  audioChunks = [];
+
+  mediaRecorder.ondataavailable = e => { if (e.data.size > 0) audioChunks.push(e.data); };
+  mediaRecorder.onstop = () => {
+    stream.getTracks().forEach(t => t.stop());
+    processAudio();
+  };
+
+  mediaRecorder.start(100);
+  recording = true;
+
+  const btn = document.getElementById("record-btn");
+  btn.classList.add("recording");
+  btn.textContent = "\u23F9";
+
+  timerSeconds = 0;
+  timerInterval = setInterval(() => {
+    timerSeconds++;
+    document.getElementById("timer").textContent =
+      `${String(Math.floor(timerSeconds / 60)).padStart(2, "0")}:${String(timerSeconds % 60).padStart(2, "0")}`;
+  }, 1000);
+
+  setStatus("recording...", "active");
+}
+
+function stopRecording() {
+  if (!mediaRecorder || mediaRecorder.state === "inactive") return;
+  clearInterval(timerInterval);
+  document.getElementById("timer").textContent = "";
+
+  // Pre-unlock an Audio element during user gesture (iOS requires this)
+  unlockedAudio = new Audio();
+  unlockedAudio.setAttribute('playsinline', '');
+  unlockedAudio.src = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=";
+  unlockedAudio.play().catch(() => {});
+
+  mediaRecorder.stop();
+  recording = false;
+
+  const btn = document.getElementById("record-btn");
+  btn.classList.remove("recording");
+  btn.textContent = "\uD83C\uDFA4";
+  btn.disabled = true;
+}
+
+// ── Process audio ──────────────────────────────────────────────────────────────
+async function processAudio() {
+  const actualMime = mediaRecorder.mimeType || "audio/webm";
+  const blob = new Blob(audioChunks, { type: actualMime });
+
+  if (blob.size < 1000) {
+    setStatus("too short — try again", "error");
+    document.getElementById("record-btn").disabled = false;
+    return;
+  }
+
+  if (!state.currentConvId) {
+    setStatus("no conversation selected", "error");
+    document.getElementById("record-btn").disabled = false;
+    return;
+  }
+
+  showPipeline(true);
+  const t0 = performance.now();
+
+  // ── Step 1: ASR ──
+  setStep("asr", "active");
+  setStatus("transcribing...");
+
+  // Determine file extension from mime type for Whisper API
+  const ext = actualMime.includes('mp4') ? 'audio.mp4'
+    : actualMime.includes('ogg') ? 'audio.ogg'
+    : 'audio.webm';
+
+  let transcript;
+  try {
+    const formData = new FormData();
+    formData.append("audio", blob, ext);
+    formData.append("conversation_id", state.currentConvId);
+    const r = await api("/transcribe", { method: "POST", body: formData });
+    if (!r.ok) throw new Error(await r.text());
+    const data = await r.json();
+    transcript = data.transcript;
+  } catch (e) {
+    showError("ASR failed: " + e.message);
+    reset(); return;
+  }
+
+  const asrMs = Math.round(performance.now() - t0);
+  setStep("asr", "done");
+
+  if (!transcript) {
+    showError("Nothing heard — please try again");
+    reset(); return;
+  }
+
+  addBubble("user", transcript);
+
+  // ── Step 2+3: LLM + TTS ──
+  setStep("llm", "active");
+  setStatus("thinking...");
+
+  let reply, mp3b64, totalMs, llmMs, ttsMs;
+  try {
+    const formData = new FormData();
+    formData.append("transcript", transcript);
+    formData.append("conversation_id", state.currentConvId);
+    const r = await api("/chat", { method: "POST", body: formData });
+    if (!r.ok) throw new Error(await r.text());
+    const data = await r.json();
+    reply = data.reply;
+    mp3b64 = data.mp3_base64;
+    totalMs = data.total_ms;
+    llmMs = data.llm_ms;
+    ttsMs = data.tts_ms;
+  } catch (e) {
+    showError("LLM/TTS failed: " + e.message);
+    reset(); return;
+  }
+
+  setStep("llm", "done");
+  setStep("tts", "done");
+
+  const endToEndMs = Math.round(performance.now() - t0);
+
+  addBubble("ai", reply);
+  addLatencyBadge(endToEndMs, asrMs, llmMs, ttsMs);
+
+  // Update conversation title in sidebar if it was auto-set
+  await loadConversations();
+
+  // ── Play TTS audio ──
+  setStatus("speaking...", "active");
+  try {
+    const mp3Bytes = Uint8Array.from(atob(mp3b64), c => c.charCodeAt(0));
+    const audioBlob = new Blob([mp3Bytes], { type: "audio/mpeg" });
+    const url = URL.createObjectURL(audioBlob);
+
+    activeAudio = unlockedAudio || new Audio();
+    unlockedAudio = null;
+    activeAudio.setAttribute('playsinline', '');
+    activeAudio.src = url;
+    activeAudio.onended = () => {
+      URL.revokeObjectURL(url);
+      activeAudio = null;
+      setStatus("");
+    };
+    activeAudio.onerror = () => {
+      URL.revokeObjectURL(url);
+      activeAudio = null;
+      setStatus("");
+    };
+    await activeAudio.play();
+  } catch (e) {
+    console.error("[AUDIO] playback error:", e);
+    setStatus("audio playback error", "error");
+    activeAudio = null;
+  }
+
+  showPipeline(false);
+  reset();
+}
+
+// ── UI helpers ─────────────────────────────────────────────────────────────────
+function addBubble(role, text, animate = true) {
+  const conv = document.getElementById("conversation");
+  document.getElementById("empty")?.remove();
+
+  const div = document.createElement("div");
+  div.className = `bubble ${role}`;
+  if (!animate) div.style.animation = 'none';
+
+  if (role === "ai") {
+    div.innerHTML = formatAiMessage(text);
+    // Wire up lesson toggle buttons
+    div.querySelectorAll('.lesson-toggle').forEach(toggle => {
+      toggle.addEventListener('click', () => {
+        toggle.classList.toggle('open');
+        const content = toggle.nextElementSibling;
+        if (content) content.classList.toggle('open');
       });
-    }
+    });
+    // Replay button
+    const replayBtn = document.createElement('button');
+    replayBtn.className = 'replay-btn';
+    replayBtn.innerHTML = '&#x1F50A;';
+    replayBtn.title = 'Replay';
+    replayBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      replayAudio(text, replayBtn);
+    });
+    div.appendChild(replayBtn);
+  } else {
+    div.textContent = text;
+  }
 
-    function renderToneBar(tones, activeTone) {
-      const bar = document.getElementById("tone-bar");
-      bar.innerHTML = "";
-      for (const [key, label] of Object.entries(tones)) {
-        const btn = document.createElement("button");
-        btn.className = "tone-btn" + (key === activeTone ? " active" : "");
-        btn.textContent = label;
-        btn.dataset.tone = key;
-        btn.onclick = () => switchTone(key);
-        bar.appendChild(btn);
-      }
-    }
+  conv.appendChild(div);
+  requestAnimationFrame(() => { conv.scrollTop = conv.scrollHeight; });
+}
 
-    async function switchTone(tone) {
-      if (tone === currentTone) return;
-      if (activeAudio) { activeAudio.pause(); activeAudio = null; }
+async function replayAudio(text, btn) {
+  if (activeAudio) { activeAudio.pause(); activeAudio = null; }
+  if (!state.currentConvId) return;
 
-      setStatus("switching tone…");
-      try {
-        const formData = new FormData();
-        formData.append("tone", tone);
-        const r = await fetch("/tone", { method: "POST", body: formData });
-        if (!r.ok) throw new Error(await r.text());
-        const d = await r.json();
-        currentTone = d.tone;
-        document.querySelectorAll(".tone-btn").forEach(btn => {
-          btn.classList.toggle("active", btn.dataset.tone === d.tone);
-        });
-        // Clear conversation since personality changed
-        const conv = document.getElementById("conversation");
-        conv.innerHTML = `<div class="empty-state" id="empty">
-      <span>🎤</span><span>Click the mic to start speaking</span>
-    </div>`;
-        setStatus("ready — " + d.label);
-        setTimeout(() => setStatus("ready"), 2000);
-      } catch (e) {
-        setStatus("tone switch failed: " + e.message, "error");
-      }
-    }
+  btn.classList.add('loading');
+  try {
+    const formData = new FormData();
+    formData.append('text', text);
+    formData.append('conversation_id', state.currentConvId);
+    const r = await api('/tts', { method: 'POST', body: formData });
+    if (!r.ok) throw new Error(await r.text());
+    const data = await r.json();
 
-    async function switchLang(lang) {
-      // Stop any playing audio
-      if (activeAudio) { activeAudio.pause(); activeAudio = null; }
+    const mp3Bytes = Uint8Array.from(atob(data.mp3_base64), c => c.charCodeAt(0));
+    const audioBlob = new Blob([mp3Bytes], { type: 'audio/mpeg' });
+    const url = URL.createObjectURL(audioBlob);
 
-      setStatus("switching…");
-      try {
-        const formData = new FormData();
-        formData.append("language", lang);
-        const r = await fetch("/language", { method: "POST", body: formData });
-        if (!r.ok) throw new Error(await r.text());
-        const d = await r.json();
-        updateLangUI(d.language);
-        // Refresh tone bar for new language
-        const cfg = await (await fetch("/config")).json();
-        currentTone = cfg.tone;
-        renderToneBar(cfg.available_tones, cfg.tone);
-        // Clear conversation UI
-        const conv = document.getElementById("conversation");
-        conv.innerHTML = `<div class="empty-state" id="empty">
-      <span>🎤</span><span>Click the mic to start speaking</span>
-    </div>`;
-        setStatus("ready");
-      } catch (e) {
-        setStatus("switch failed: " + e.message, "error");
-      }
-    }
+    activeAudio = new Audio();
+    activeAudio.setAttribute('playsinline', '');
+    activeAudio.src = url;
+    activeAudio.onended = () => { URL.revokeObjectURL(url); activeAudio = null; };
+    activeAudio.onerror = () => { URL.revokeObjectURL(url); activeAudio = null; };
+    await activeAudio.play();
+  } catch (e) {
+    console.error('[REPLAY]', e);
+  } finally {
+    btn.classList.remove('loading');
+  }
+}
 
-    // ── Record toggle ──────────────────────────────────────────────────────────────
-    async function toggleRecord() {
-      if (recording) {
-        stopRecording();
-      } else {
-        await startRecording();
-      }
-    }
+function formatAiMessage(text) {
+  // Extract [LESSON] / [课程] block if present
+  const lessonRx = /\[LESSON\]\s*([\s\S]*?)(?=\[PROMPT\]|$)/i;
+  const lessonRxCn = /\[课程\]\s*([\s\S]*?)(?=\[话题\]|$)/;
+  let lessonMatch = text.match(lessonRx) || text.match(lessonRxCn);
+  let lessonHtml = '';
+  let mainText = text;
 
-    async function startRecording() {
-      // Stop any playing audio (barge-in behaviour)
-      if (activeAudio) {
-        activeAudio.pause();
-        activeAudio = null;
-      }
+  if (lessonMatch) {
+    const lessonContent = lessonMatch[1].trim();
+    // Remove the [LESSON]...[PROMPT] from the main text
+    mainText = text.replace(lessonMatch[0], '');
+    // Build collapsible lesson
+    const escapedLesson = lessonContent
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/\n/g, '<br>');
+    lessonHtml = `<div class="lesson-toggle"><span class="lesson-toggle-label">Lesson</span><span class="lesson-toggle-arrow">&#x25BC;</span></div><div class="lesson-content">${escapedLesson}</div>`;
+  }
 
-      let stream;
-      try {
-        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      } catch (e) {
-        setStatus("mic permission denied", "error");
-        return;
-      }
+  // Clean up markers from main text
+  mainText = mainText
+    .replace(/\[(?:REPLY|PROMPT|回复|话题)\]\s*/gi, '')
+    .trim();
 
-      // Prefer webm/opus; fall back to whatever the browser supports
-      const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
-        ? "audio/webm;codecs=opus"
-        : MediaRecorder.isTypeSupported("audio/webm")
-          ? "audio/webm"
-          : "";
+  // Format remaining [...] and 【...】 as tips
+  const formatted = mainText
+    .replace(/\[([^\]]+)\]/g, '<span class="tip">[$1]</span>')
+    .replace(/【([^】]+)】/g, '<span class="tip">【$1】</span>');
 
-      mediaRecorder = new MediaRecorder(stream, mimeType ? { mimeType } : {});
-      audioChunks = [];
+  return formatted + lessonHtml;
+}
 
-      mediaRecorder.ondataavailable = e => { if (e.data.size > 0) audioChunks.push(e.data); };
-      mediaRecorder.onstop = () => {
-        stream.getTracks().forEach(t => t.stop());
-        processAudio();
-      };
+function addLatencyBadge(total, asr, llm, tts) {
+  const conv = document.getElementById("conversation");
+  const badge = document.createElement("div");
+  const cls = total < 700 ? "fast" : total < 1000 ? "ok" : "slow";
+  badge.className = `latency-badge ${cls}`;
+  badge.textContent = `${total}ms total (asr ${asr} \u00B7 llm ${llm} \u00B7 tts ${tts})`;
+  conv.appendChild(badge);
+  requestAnimationFrame(() => { conv.scrollTop = conv.scrollHeight; });
+}
 
-      mediaRecorder.start(100);
-      recording = true;
+function showError(msg) {
+  const conv = document.getElementById("conversation");
+  document.getElementById("empty")?.remove();
+  const div = document.createElement("div");
+  div.className = "bubble error";
+  div.textContent = "\u26A0 " + msg;
+  conv.appendChild(div);
+  requestAnimationFrame(() => { conv.scrollTop = conv.scrollHeight; });
+}
 
-      const btn = document.getElementById("record-btn");
-      btn.classList.add("recording");
-      btn.textContent = "⏹";
+function setStatus(msg, cls = "") {
+  const el = document.getElementById("status");
+  el.textContent = msg;
+  el.className = cls;
+}
 
-      timerSeconds = 0;
-      timerInterval = setInterval(() => {
-        timerSeconds++;
-        document.getElementById("timer").textContent =
-          `${String(Math.floor(timerSeconds / 60)).padStart(2, "0")}:${String(timerSeconds % 60).padStart(2, "0")}`;
-      }, 1000);
+function setStep(id, s) {
+  const el = document.getElementById("step-" + id);
+  if (el) el.className = "pipe-step " + s;
+}
 
-      setStatus("recording…", "active");
-    }
+function showPipeline(visible) {
+  const el = document.getElementById("pipeline");
+  el.classList.toggle("visible", visible);
+  if (visible) ["asr", "llm", "tts"].forEach(id => setStep(id, ""));
+}
 
-    function stopRecording() {
-      if (!mediaRecorder || mediaRecorder.state === "inactive") return;
-      clearInterval(timerInterval);
-      document.getElementById("timer").textContent = "";
+function reset() {
+  document.getElementById("record-btn").disabled = false;
+  document.getElementById("record-btn").textContent = "\uD83C\uDFA4";
+}
 
-      // Pre-unlock an Audio element during user gesture (iOS PWA requires this)
-      unlockedAudio = new Audio();
-      unlockedAudio.src = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=";
-      unlockedAudio.play().catch(() => {}); // silent play to unlock
+function relativeTime(dateStr) {
+  if (!dateStr) return '';
+  const d = new Date(dateStr + 'Z');
+  const diff = (Date.now() - d.getTime()) / 1000;
+  if (diff < 60) return 'just now';
+  if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
+  if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
+  return Math.floor(diff / 86400) + 'd ago';
+}
 
-      mediaRecorder.stop();
-      recording = false;
+// ── PWA: Service Worker + Push Notifications ────────────────────────────────────
+let swRegistration = null;
 
-      const btn = document.getElementById("record-btn");
-      btn.classList.remove("recording");
-      btn.textContent = "🎤";
-      btn.disabled = true;
-    }
+async function initPWA() {
+  if (!("serviceWorker" in navigator)) {
+    document.getElementById("notify-btn").style.display = "none";
+    return;
+  }
+  try {
+    swRegistration = await navigator.serviceWorker.register("/sw.js");
+    const ready = await navigator.serviceWorker.ready;
+    const sub = await ready.pushManager.getSubscription();
+    if (sub) document.getElementById("notify-btn").classList.add("active");
+  } catch (e) {
+    console.error("[PWA] SW registration failed:", e);
+  }
+  if (!("PushManager" in window)) {
+    document.getElementById("notify-btn").style.display = "none";
+  }
+}
 
-    // ── Process audio: ASR → LLM+TTS ──────────────────────────────────────────────
-    async function processAudio() {
-      const blob = new Blob(audioChunks, {
-        type: mediaRecorder.mimeType || "audio/webm",
+async function toggleReminder() {
+  if (!swRegistration || !("PushManager" in window)) {
+    setStatus("push not supported", "error");
+    return;
+  }
+  const existing = await swRegistration.pushManager.getSubscription();
+  if (existing) {
+    await existing.unsubscribe();
+    await fetch("/unsubscribe", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ endpoint: existing.endpoint }),
+    });
+    document.getElementById("notify-btn").classList.remove("active");
+    setStatus("reminders off");
+  } else {
+    try {
+      const permission = await Notification.requestPermission();
+      if (permission !== "granted") { setStatus("notification denied", "error"); return; }
+      const r = await fetch("/vapid-public-key");
+      const { public_key } = await r.json();
+      const key = urlBase64ToUint8Array(public_key);
+      const sub = await swRegistration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: key });
+      await fetch("/subscribe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(sub.toJSON()),
       });
-
-      if (blob.size < 1000) {
-        setStatus("too short — try again", "error");
-        document.getElementById("record-btn").disabled = false;
-        return;
-      }
-
-      showPipeline(true);
-      const t0 = performance.now();
-
-      // ── Step 1: ASR ──────────────────────────────────────────────────────────────
-      setStep("asr", "active");
-      setStatus("transcribing…");
-
-      let transcript;
-      try {
-        const formData = new FormData();
-        formData.append("audio", blob, "audio.webm");
-        const r = await fetch("/transcribe", { method: "POST", body: formData });
-        if (!r.ok) throw new Error(await r.text());
-        const data = await r.json();
-        transcript = data.transcript;
-      } catch (e) {
-        showError("ASR failed: " + e.message);
-        reset(); return;
-      }
-
-      const asrMs = Math.round(performance.now() - t0);
-      setStep("asr", "done");
-
-      if (!transcript) {
-        showError("Nothing heard — please try again");
-        reset(); return;
-      }
-
-      addBubble("user", transcript);
-
-      // ── Step 2 + 3: LLM + TTS ────────────────────────────────────────────────────
-      setStep("llm", "active");
-      setStatus("thinking…");
-
-      let reply, mp3b64, totalMs, llmMs, ttsMs;
-      try {
-        const formData = new FormData();
-        formData.append("transcript", transcript);
-        const r = await fetch("/chat", { method: "POST", body: formData });
-        if (!r.ok) throw new Error(await r.text());
-        const data = await r.json();
-        reply = data.reply;
-        mp3b64 = data.mp3_base64;
-        totalMs = data.total_ms;
-        llmMs = data.llm_ms;
-        ttsMs = data.tts_ms;
-      } catch (e) {
-        showError("LLM/TTS failed: " + e.message);
-        reset(); return;
-      }
-
-      setStep("llm", "done");
-      setStep("tts", "done");
-
-      const endToEndMs = Math.round(performance.now() - t0);
-
-      addBubble("ai", reply);
-      addLatencyBadge(endToEndMs, asrMs, llmMs, ttsMs);
-
-      // ── Play TTS audio (reuse unlocked Audio for iOS PWA) ──────────────────────
-      setStatus("speaking…", "active");
-      try {
-        const mp3Bytes = Uint8Array.from(atob(mp3b64), c => c.charCodeAt(0));
-        const audioBlob = new Blob([mp3Bytes], { type: "audio/mpeg" });
-        const url = URL.createObjectURL(audioBlob);
-
-        // Reuse the gesture-unlocked Audio element if available (iOS PWA fix)
-        activeAudio = unlockedAudio || new Audio();
-        unlockedAudio = null;
-        activeAudio.src = url;
-        activeAudio.onended = () => {
-          URL.revokeObjectURL(url);
-          activeAudio = null;
-          setStatus("ready");
-        };
-        await activeAudio.play();
-      } catch (e) {
-        console.error("[AUDIO] playback error:", e);
-        setStatus("audio playback error", "error");
-      }
-
-      showPipeline(false);
-      reset();
+      document.getElementById("notify-btn").classList.add("active");
+      setStatus("reminders on");
+    } catch (e) {
+      setStatus("push failed: " + e.message, "error");
     }
+  }
+  setTimeout(() => setStatus(""), 3000);
+}
 
-    // ── UI helpers ─────────────────────────────────────────────────────────────────
-    function addBubble(role, text) {
-      const conv = document.getElementById("conversation");
-      document.getElementById("empty")?.remove();
+function urlBase64ToUint8Array(base64String) {
+  const padding = "=".repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const raw = atob(base64);
+  return Uint8Array.from([...raw].map(c => c.charCodeAt(0)));
+}
 
-      const div = document.createElement("div");
-      div.className = `bubble ${role}`;
-
-      if (role === "ai") {
-        // Render [Tip: ...] / 【提示：...】 in green
-        const formatted = text
-          .replace(/\[([^\]]+)\]/g, '<span class="tip">[$1]</span>')
-          .replace(/【([^】]+)】/g, '<span class="tip">【$1】</span>');
-        div.innerHTML = formatted;
-      } else {
-        div.textContent = text;
-      }
-
-      conv.appendChild(div);
-      conv.scrollTop = conv.scrollHeight;
-    }
-
-    function addLatencyBadge(total, asr, llm, tts) {
-      const conv = document.getElementById("conversation");
-      const badge = document.createElement("div");
-      const cls = total < 700 ? "fast" : total < 1000 ? "ok" : "slow";
-      badge.className = `latency-badge ${cls}`;
-      badge.textContent = `${total}ms total (asr ${asr} · llm ${llm} · tts ${tts})`;
-      conv.appendChild(badge);
-      conv.scrollTop = conv.scrollHeight;
-    }
-
-    function showError(msg) {
-      const conv = document.getElementById("conversation");
-      document.getElementById("empty")?.remove();
-      const div = document.createElement("div");
-      div.className = "bubble error";
-      div.textContent = "⚠ " + msg;
-      conv.appendChild(div);
-      conv.scrollTop = conv.scrollHeight;
-    }
-
-    function setStatus(msg, cls = "") {
-      const el = document.getElementById("status");
-      el.textContent = msg;
-      el.className = cls;
-    }
-
-    function setStep(id, state) {
-      const el = document.getElementById("step-" + id);
-      if (el) el.className = "pipe-step " + state;
-    }
-
-    function showPipeline(visible) {
-      const el = document.getElementById("pipeline");
-      el.classList.toggle("visible", visible);
-      if (visible) {
-        ["asr", "llm", "tts"].forEach(id => setStep(id, ""));
-      }
-    }
-
-    function reset() {
-      document.getElementById("record-btn").disabled = false;
-      document.getElementById("record-btn").textContent = "🎤";
-    }
-
-    async function clearHistory() {
-      await fetch("/history", { method: "DELETE" });
-      const conv = document.getElementById("conversation");
-      conv.innerHTML = `<div class="empty-state" id="empty">
-    <span>🎤</span><span>Click the mic to start speaking</span>
-  </div>`;
-      setStatus("chat cleared");
-      setTimeout(() => setStatus("ready"), 1500);
-    }
-
-    // ── PWA: Service Worker + Push Notifications ────────────────────────────────────
-    let swRegistration = null;
-
-    async function initPWA() {
-      console.log("[PWA] init start");
-      console.log("[PWA] serviceWorker supported:", "serviceWorker" in navigator);
-      console.log("[PWA] PushManager supported:", "PushManager" in window);
-      console.log("[PWA] Notification supported:", "Notification" in window);
-      console.log("[PWA] Notification.permission:", "Notification" in window ? Notification.permission : "N/A");
-
-      if (!("serviceWorker" in navigator)) {
-        console.warn("[PWA] serviceWorker NOT supported");
-        document.getElementById("notify-btn").style.display = "none";
-        return;
-      }
-      try {
-        swRegistration = await navigator.serviceWorker.register("/sw.js");
-        console.log("[PWA] SW registered, scope:", swRegistration.scope);
-        console.log("[PWA] SW state:", swRegistration.active?.state || swRegistration.installing?.state || "unknown");
-
-        // Wait for SW to be ready
-        const ready = await navigator.serviceWorker.ready;
-        console.log("[PWA] SW ready, scope:", ready.scope);
-        console.log("[PWA] pushManager available:", !!ready.pushManager);
-
-        // Update notify button state
-        const sub = await ready.pushManager.getSubscription();
-        console.log("[PWA] existing subscription:", sub ? sub.endpoint.substring(0, 60) + "..." : "none");
-        if (sub) document.getElementById("notify-btn").classList.add("active");
-      } catch (e) {
-        console.error("[PWA] SW registration failed:", e);
-      }
-
-      // Hide bell if push not supported
-      if (!("PushManager" in window)) {
-        console.warn("[PWA] PushManager NOT supported — hiding bell");
-        document.getElementById("notify-btn").style.display = "none";
-      }
-    }
-
-    async function toggleReminder() {
-      console.log("[PUSH] toggleReminder called");
-      console.log("[PUSH] swRegistration:", !!swRegistration);
-      console.log("[PUSH] PushManager:", "PushManager" in window);
-
-      if (!swRegistration || !("PushManager" in window)) {
-        setStatus("push not supported — open from Home Screen (HTTPS)", "error");
-        return;
-      }
-
-      const existing = await swRegistration.pushManager.getSubscription();
-      console.log("[PUSH] existing sub:", existing ? "yes" : "no");
-
-      if (existing) {
-        // Unsubscribe
-        console.log("[PUSH] unsubscribing...");
-        const ok = await existing.unsubscribe();
-        console.log("[PUSH] unsubscribe result:", ok);
-        await fetch("/unsubscribe", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ endpoint: existing.endpoint }),
-        });
-        document.getElementById("notify-btn").classList.remove("active");
-        setStatus("reminders off");
-      } else {
-        // Subscribe
-        try {
-          console.log("[PUSH] requesting permission...");
-          const permission = await Notification.requestPermission();
-          console.log("[PUSH] permission result:", permission);
-          if (permission !== "granted") {
-            setStatus("notification permission denied (" + permission + ")", "error");
-            return;
-          }
-
-          console.log("[PUSH] fetching VAPID public key...");
-          const r = await fetch("/vapid-public-key");
-          const { public_key } = await r.json();
-          console.log("[PUSH] VAPID public key:", public_key.substring(0, 20) + "...");
-
-          const applicationServerKey = urlBase64ToUint8Array(public_key);
-          console.log("[PUSH] applicationServerKey length:", applicationServerKey.length, "(should be 65)");
-
-          console.log("[PUSH] calling pushManager.subscribe...");
-          const sub = await swRegistration.pushManager.subscribe({
-            userVisibleOnly: true,
-            applicationServerKey: applicationServerKey,
-          });
-          console.log("[PUSH] subscription created!");
-          console.log("[PUSH] endpoint:", sub.endpoint);
-
-          const subJSON = sub.toJSON();
-          console.log("[PUSH] sub keys present:", !!subJSON.keys, "p256dh:", !!subJSON.keys?.p256dh, "auth:", !!subJSON.keys?.auth);
-
-          console.log("[PUSH] sending subscription to server...");
-          const res = await fetch("/subscribe", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(subJSON),
-          });
-          const resData = await res.json();
-          console.log("[PUSH] server subscribe response:", JSON.stringify(resData));
-          if (!res.ok) throw new Error("subscribe failed: " + JSON.stringify(resData));
-
-          document.getElementById("notify-btn").classList.add("active");
-          setStatus("subscribed! sending test push...");
-
-          // Send a test notification
-          console.log("[PUSH] sending test push...");
-          const pushRes = await fetch("/send-push", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ title: "Voice AI Coach", body: "Notifications enabled! Time to practice." }),
-          });
-          const pushData = await pushRes.json();
-          console.log("[PUSH] send-push response:", JSON.stringify(pushData));
-          setStatus("push sent: " + pushData.sent + "/" + pushData.total + " — check notification!");
-        } catch (e) {
-          setStatus("failed: " + e.message, "error");
-          console.error("[PUSH] subscribe error:", e);
-        }
-      }
-      setTimeout(() => setStatus("ready"), 5000);
-    }
-
-    function urlBase64ToUint8Array(base64String) {
-      const padding = "=".repeat((4 - base64String.length % 4) % 4);
-      const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
-      const raw = atob(base64);
-      return Uint8Array.from([...raw].map(c => c.charCodeAt(0)));
-    }
-
-    initPWA();
-  </script>
+initPWA();
+</script>
 </body>
 
 </html>

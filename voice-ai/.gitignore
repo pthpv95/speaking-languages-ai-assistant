@@ -8,3 +8,4 @@ __pycache__/
 .vapid_private.pem
 .push_subs.json
 *.pem
+voice_ai.db
