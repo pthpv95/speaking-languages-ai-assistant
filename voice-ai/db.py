@@ -27,6 +27,8 @@ async def init_db():
                 title       TEXT DEFAULT 'New conversation',
                 language    TEXT NOT NULL DEFAULT 'chinese',
                 tone        TEXT NOT NULL DEFAULT 'hype',
+                summary     TEXT DEFAULT '',
+                summarized_up_to INTEGER DEFAULT 0,
                 created_at  TEXT DEFAULT (datetime('now')),
                 updated_at  TEXT DEFAULT (datetime('now'))
             );
@@ -40,6 +42,13 @@ async def init_db():
             );
         """)
         await db.commit()
+        # Migrate: add summary columns if missing (for existing DBs)
+        try:
+            await db.execute("SELECT summary FROM conversations LIMIT 1")
+        except Exception:
+            await db.execute("ALTER TABLE conversations ADD COLUMN summary TEXT DEFAULT ''")
+            await db.execute("ALTER TABLE conversations ADD COLUMN summarized_up_to INTEGER DEFAULT 0")
+            await db.commit()
 
 
 async def get_or_create_user(username: str) -> dict:
@@ -97,7 +106,7 @@ async def get_conversation(conv_id: int, user_id: int) -> dict | None:
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         cursor = await db.execute(
-            "SELECT id, title, language, tone, updated_at FROM conversations "
+            "SELECT id, title, language, tone, summary, summarized_up_to, updated_at FROM conversations "
             "WHERE id = ? AND user_id = ?",
             (conv_id, user_id),
         )
@@ -182,3 +191,37 @@ async def get_all_messages(conv_id: int) -> list[dict]:
         )
         rows = await cursor.fetchall()
         return [dict(r) for r in rows]
+
+
+async def get_messages_after(conv_id: int, after_id: int) -> list[dict]:
+    """Get messages with id > after_id (oldest first). Used to get unsummarized messages."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cursor = await db.execute(
+            "SELECT id, role, content FROM messages "
+            "WHERE conversation_id = ? AND id > ? ORDER BY id ASC",
+            (conv_id, after_id),
+        )
+        rows = await cursor.fetchall()
+        return [dict(r) for r in rows]
+
+
+async def get_message_count(conv_id: int) -> int:
+    """Get total message count for a conversation."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute(
+            "SELECT COUNT(*) FROM messages WHERE conversation_id = ?",
+            (conv_id,),
+        )
+        row = await cursor.fetchone()
+        return row[0]
+
+
+async def update_summary(conv_id: int, summary: str, summarized_up_to: int):
+    """Update the conversation summary and the last summarized message id."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            "UPDATE conversations SET summary = ?, summarized_up_to = ? WHERE id = ?",
+            (summary, summarized_up_to, conv_id),
+        )
+        await db.commit()
