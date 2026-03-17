@@ -527,6 +527,7 @@
     let timerInterval = null;
     let timerSeconds = 0;
     let activeAudio = null;
+    let unlockedAudio = null; // pre-unlocked Audio for iOS PWA
 
     // ── Init ───────────────────────────────────────────────────────────────────────
     let currentTone = "chill";
@@ -678,6 +679,12 @@
       if (!mediaRecorder || mediaRecorder.state === "inactive") return;
       clearInterval(timerInterval);
       document.getElementById("timer").textContent = "";
+
+      // Pre-unlock an Audio element during user gesture (iOS PWA requires this)
+      unlockedAudio = new Audio();
+      unlockedAudio.src = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=";
+      unlockedAudio.play().catch(() => {}); // silent play to unlock
+
       mediaRecorder.stop();
       recording = false;
 
@@ -758,13 +765,17 @@
       addBubble("ai", reply);
       addLatencyBadge(endToEndMs, asrMs, llmMs, ttsMs);
 
-      // ── Play TTS audio ────────────────────────────────────────────────────────────
+      // ── Play TTS audio (reuse unlocked Audio for iOS PWA) ──────────────────────
       setStatus("speaking…", "active");
       try {
         const mp3Bytes = Uint8Array.from(atob(mp3b64), c => c.charCodeAt(0));
-        const audioBlob = new Blob([mp3Bytes], { type: "audio/mp3" });
+        const audioBlob = new Blob([mp3Bytes], { type: "audio/mpeg" });
         const url = URL.createObjectURL(audioBlob);
-        activeAudio = new Audio(url);
+
+        // Reuse the gesture-unlocked Audio element if available (iOS PWA fix)
+        activeAudio = unlockedAudio || new Audio();
+        unlockedAudio = null;
+        activeAudio.src = url;
         activeAudio.onended = () => {
           URL.revokeObjectURL(url);
           activeAudio = null;
@@ -772,6 +783,7 @@
         };
         await activeAudio.play();
       } catch (e) {
+        console.error("[AUDIO] playback error:", e);
         setStatus("audio playback error", "error");
       }
 
