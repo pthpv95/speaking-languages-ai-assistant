@@ -9,3 +9,5 @@ __pycache__/
 .push_subs.json
 *.pem
 voice_ai.db
+voice_ai.db-wal
+voice_ai.db-shm
