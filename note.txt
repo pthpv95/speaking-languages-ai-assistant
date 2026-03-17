@@ -1,0 +1,9 @@
+
+ 1. TTS voice/tone — change the voice that speaks back to you (e.g., from en-US-JennyNeural to a different voice like
+  en-US-GuyNeural). This is the tts_voice in each language profile.
+  2. LLM tone — change the AI coach's personality/style in the system_prompt (e.g., more formal, casual, strict teacher, etc.).
+  3. ASR temperature — currently set to 0.0 at line 198, which gives the most accurate transcription. Raising it would make
+  transcription more "creative" (less accurate), which is generally not desirable.
+
+
+  

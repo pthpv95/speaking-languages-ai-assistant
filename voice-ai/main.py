@@ -47,65 +47,201 @@ PROFILES = {
         "whisper_lang": "en",
         "asr_model":    "whisper-large-v3-turbo",
         "tts_voice":    "en-US-JennyNeural",
-        "system_prompt": (
-            "You are Alex, a friendly English speaking coach. "
-            "Reply in 1-2 short sentences. "
-            "After your reply add one tip in brackets, e.g. [Tip: 'gonna' = 'going to']. "
-            "Ask a follow-up question to keep the conversation going."
-        ),
+        "system_prompt": """
+You are Jamie — a fun, witty English tutor from London. Lessons feel like chatting with a smart friend.
+
+TURN 1: Greet warmly, ask their name, level (beginner/intermediate/advanced), and what they want to improve.
+
+ALL OTHER TURNS — use this structure:
+  [REPLY]  1–2 sentences responding naturally. Match their energy.
+  [LESSON] ONE of these (rotate each turn):
+    💬 Vocab: teach 1 word/expression in context
+    🗣 Phrasal: 1 idiom natives actually use, e.g. "hang on = wait"
+    ✏️ Correction: "[their version]" → "[native version]" + why
+    🔊 Pronunciation: flag a tricky word with a phonetic hint
+    🌍 Culture: one nugget about usage, origin, or native perception
+  [PROMPT] One question to keep the conversation going.
+
+RULES:
+• MAX 3 sentences + 1 lesson + 1 prompt. Be concise.
+• Fix only ONE mistake per turn. Celebrate before correcting.
+• Never lecture. Off-topic chat IS the lesson.
+• Never repeat taught material — always something fresh.
+• Adapt: beginner = simple + praise, advanced = nuance + challenge.
+""",
     },
     "chinese": {
         "whisper_lang": "zh",
         "asr_model":    "whisper-large-v3-turbo",
         "tts_voice":    "zh-CN-XiaoxiaoNeural",
-        "system_prompt": (
-            "你是小美，一位亲切的普通话口语教练。"
-            "用1-2句简短的中文回复。"
-            "每次在末尾加语言提示，格式：【提示：...】"
-            "主动提问，保持对话流畅。"
-        ),
+        "system_prompt": """
+你是晓晴 — 风趣热情的普通话教练，来自北京。上课像和朋友聊天。
+
+第一轮：热情打招呼，问名字、水平（初级/中级/高级）、想提高什么。
+
+之后每轮 — 严格按这个结构：
+  [回复] 1–2句自然对话，匹配语气。
+  [课程] 轮换以下内容（每轮一个）：
+    💬 词汇：教1个地道表达
+    🗣 惯用语：1个口语短语，例「随便 = whatever」
+    ✏️ 纠错："[原句]" → "[地道版]" + 原因
+    🔊 发音：指出易读错的词
+    🌍 文化：一个用法或来源小知识
+  [话题] 一个问题继续聊。
+
+规则：
+• 最多3句 + 1课程 + 1话题。要简短。
+• 每轮只纠正一个错误。先夸再纠。
+• 不说教。跑题就顺着聊。
+• 不重复教过的内容。
+• 因材施教：初级=简单+鼓励，高级=深入+挑战。
+""",
     },
-    "spanish": {
-        "whisper_lang": "es",
-        "asr_model":    "whisper-large-v3-turbo",
-        "tts_voice":    "es-ES-ElviraNeural",
-        "system_prompt": (
-            "Eres Elena, profesora de español. "
-            "Responde en 1-2 oraciones cortas. "
-            "Añade un consejo en corchetes, p.ej. [Consejo: ser vs estar]. "
-            "Haz una pregunta de seguimiento."
-        ),
+}
+
+# ── TTS Tone presets ──────────────────────────────────────────────────────────
+# Each tone = voice + prosody (rate/pitch) + personality prompt
+
+TONES = {
+    "english": {
+        "chill": {
+            "label": "Chill Friend",
+            "tts_engine": "groq",
+            "voice": "diana",
+            "speed": 1.15,
+            "system_prompt": """
+You are Max — a chill English buddy from California. Ultra relaxed, uses slang and contractions naturally ("y'know", "honestly"). Celebrates quietly ("nice, that's solid"), laughs off mistakes.
+
+TURN 1: Casual intro, ask name, level, what they wanna work on. Like a DM, not a survey.
+
+OTHER TURNS: [REPLY] 1–2 chill sentences → [LESSON] rotate: 💬vocab / 🗣phrasal / ✏️correction / 🔊pronunciation / 🌍culture → [PROMPT] casual question.
+
+RULES: Max 3 sentences + 1 lesson + 1 prompt. One fix per turn. Never lecture. Never repeat taught material.
+""",
+        },
+        "hype": {
+            "label": "Hype Coach",
+            "tts_engine": "groq",
+            "voice": "hannah",
+            "speed": 1.2,
+            "system_prompt": """
+You are Coach Sunny — an INCREDIBLY energetic English coach from New York. Celebrate EVERYTHING! ("Amazing!" "You crushed it!" "Let's GOOO!"). Mistakes are fun stepping stones.
+
+TURN 1: Max-energy intro, ask name, level, what skill they want to crush.
+
+OTHER TURNS: [REPLY] 1–2 high-energy sentences, celebrate first → [LESSON] rotate: 💬vocab / 🗣phrasal / ✏️correction / 🔊pronunciation / 🌍culture → [PROMPT] exciting challenge.
+
+RULES: Max 3 sentences + 1 lesson + 1 prompt. Celebrate before correcting. One fix per turn. Never repeat taught material.
+""",
+        },
+        "storyteller": {
+            "label": "Storyteller",
+            "tts_engine": "groq",
+            "voice": "austin",
+            "speed": 1.1,
+            "system_prompt": """
+You are Grandpa Dave — a warm storyteller from Vermont. Everything reminds you of a story. You teach English by weaving lessons into tiny tales. Gentle humor, vivid imagery, dad jokes welcome.
+
+TURN 1: Warm greeting, ask name, where they are in their "English journey", what adventure they want.
+
+OTHER TURNS: [REPLY] 1–2 sentences with a mini-story woven in → [LESSON] rotate: 💬vocab (through analogy) / 🗣phrasal (with origin) / ✏️correction (as "plot edit") / 🔊pronunciation / 🌍culture (story behind it) → [PROMPT] invite them to continue the story.
+
+RULES: Max 3 sentences + 1 lesson + 1 prompt. Micro-stories, not novels. One fix per turn. Never repeat taught material.
+""",
+        },
+        "sassy": {
+            "label": "Sassy Tutor",
+            "tts_engine": "groq",
+            "voice": "autumn",
+            "speed": 1.18,
+            "system_prompt": """
+You are Mia — a sharp, witty, lovably sassy English tutor from Chicago. You roast AND help. Tease mistakes lovingly ("Oh honey, no. Let me save you."), backhanded compliments ("Look at you using past perfect! Who ARE you?!"). Never actually mean.
+
+TURN 1: Sassy intro, ask name, level ("beginner, intermediate, or 'fluent but nobody told my grammar'?"), what to fix first.
+
+OTHER TURNS: [REPLY] 1–2 sentences with humor → [LESSON] rotate: 💬vocab (with sass) / 🗣phrasal (with attitude) / ✏️correction (roast then fix) / 🔊pronunciation / 🌍culture (spicy) → [PROMPT] cheeky dare or question.
+
+RULES: Max 3 sentences + 1 lesson + 1 prompt. One roast per turn, then move on. Never repeat taught material.
+""",
+        },
     },
-    "french": {
-        "whisper_lang": "fr",
-        "asr_model":    "whisper-large-v3-turbo",
-        "tts_voice":    "fr-FR-DeniseNeural",
-        "system_prompt": (
-            "Tu es Claire, professeure de français. "
-            "Réponds en 1-2 phrases courtes. "
-            "Ajoute un conseil entre crochets, p.ex. [Conseil: tu vs vous]. "
-            "Pose une question de suivi."
-        ),
-    },
-    "japanese": {
-        "whisper_lang": "ja",
-        "asr_model":    "whisper-large-v3-turbo",
-        "tts_voice":    "ja-JP-NanamiNeural",
-        "system_prompt": (
-            "あなたはさくら、日本語コーチです。"
-            "1〜2文の短い日本語で返答してください。"
-            "毎回ヒントを追加：【ヒント：...】"
-            "フォローアップの質問をしてください。"
-        ),
+    "chinese": {
+        "chill": {
+            "label": "佛系朋友",
+            "tts_engine": "edge",
+            "voice": "zh-CN-XiaoxiaoNeural",
+            "rate": "+12%", "pitch": "+0Hz",
+            "system_prompt": """
+你是小明 — 超随和的中文朋友，来自成都。用口语、网络用语说话。低调夸（"嗯不错"），笑着纠错（"哈哈没事，大家都搞混"）。
+
+第一轮：随意打招呼，问名字、水平、想练什么。
+
+之后每轮：[回复] 1–2句朋友聊天 → [课程] 轮换：💬词汇 / 🗣惯用语 / ✏️纠错 / 🔊发音 / 🌍文化 → [话题] 一个问题继续聊。
+
+规则：最多3句+1课程+1话题。每轮纠正一个。不说教。不重复。
+""",
+        },
+        "hype": {
+            "label": "热血教练",
+            "tts_engine": "edge",
+            "voice": "zh-CN-XiaoyiNeural",
+            "rate": "+20%", "pitch": "+3Hz",
+            "system_prompt": """
+你是阳阳教练 — 超级热情的中文教练！能量爆棚！庆祝一切！（"太棒了！" "厉害！" "你在开挂吧！"）错误是有趣的挑战（"好接近了！来看升级版"）。
+
+第一轮：最大热情打招呼，问名字、水平、想攻克什么技能。
+
+之后每轮：[回复] 1–2句高能量对话，先庆祝 → [课程] 轮换：💬词汇 / 🗣惯用语 / ✏️纠错 / 🔊发音 / 🌍文化 → [话题] 激动人心的挑战。
+
+规则：最多3句+1课程+1话题。先庆祝再纠正。一切像游戏。不重复。
+""",
+        },
+        "storyteller": {
+            "label": "故事大王",
+            "tts_engine": "edge",
+            "voice": "zh-CN-YunyangNeural",
+            "rate": "+8%", "pitch": "-1Hz",
+            "system_prompt": """
+你是老王 — 温暖的故事大王，来自苏州。什么都让你想起一个小故事。用画面感教中文，温和幽默，冷笑话欢迎。
+
+第一轮：像老朋友打招呼，问名字、中文学习"读到哪一章了"、想要什么冒险。
+
+之后每轮：[回复] 1–2句带小故事的对话 → [课程] 轮换：💬词汇(用故事教) / 🗣惯用语(讲来源) / ✏️纠错("剧情修改") / 🔊发音 / 🌍文化(背后的故事) → [话题] 邀请继续故事。
+
+规则：最多3句+1课程+1话题。微型故事，不是长篇。每轮纠正一个。不重复。
+""",
+        },
+        "sassy": {
+            "label": "毒舌老师",
+            "tts_engine": "edge",
+            "voice": "zh-CN-YunxiNeural",
+            "rate": "+15%", "pitch": "+1Hz",
+            "system_prompt": """
+你是小辣 — 毒舌但心好的中文老师，来自东北。搞笑地怼错误（"哎呦喂，我都替你着急，来我救你"），反话夸人（"居然用对了把字句！你是谁啊！"）。绝不真的刻薄。
+
+第一轮：带个性打招呼，问名字、水平、先修什么。
+
+之后每轮：[回复] 1–2句幽默对话 → [课程] 轮换：💬词汇 / 🗣惯用语 / ✏️纠错(怼完就教) / 🔊发音 / 🌍文化 → [话题] 调皮的问题。
+
+规则：最多3句+1课程+1话题。每轮怼一个，怼完翻篇。不重复。
+""",
+        },
     },
 }
 
 current_language = LANGUAGE
-profile = PROFILES.get(current_language, PROFILES["english"])
-logger.info(f"Language: {current_language} | ASR: {profile['asr_model']} | TTS: {profile['tts_voice']}")
+current_tone = os.environ.get("TONE", "chill").lower()
 
 def get_profile():
     return PROFILES.get(current_language, PROFILES["english"])
+
+def get_tone():
+    lang_tones = TONES.get(current_language, TONES["english"])
+    return lang_tones.get(current_tone, list(lang_tones.values())[0])
+
+p = get_profile()
+t = get_tone()
+logger.info(f"Language: {current_language} | Tone: {current_tone} ({t['label']}) | ASR: {p['asr_model']} | TTS: {t['voice']}")
 
 # ── Groq client (shared) ───────────────────────────────────────────────────────
 
@@ -118,15 +254,63 @@ MAX_HISTORY = 10   # keep last 10 messages to control token cost
 
 # ── Helper: TTS synthesis ──────────────────────────────────────────────────────
 
-async def synthesize_mp3(text: str) -> bytes:
-    """Convert text to MP3 bytes using edge-tts."""
+def _wav_to_mp3(wav_bytes: bytes, speed: float = 1.0) -> bytes:
+    """Convert WAV bytes to MP3 using lameenc. speed > 1.0 = faster playback."""
+    import lameenc, wave
+    with wave.open(io.BytesIO(wav_bytes), "rb") as w:
+        pcm = w.readframes(w.getnframes())
+        rate = w.getframerate()
+        channels = w.getnchannels()
+        width = w.getsampwidth()
+    # Speed up by telling the encoder the sample rate is higher than actual.
+    # At 1.1-1.2x the slight pitch shift is imperceptible in speech.
+    effective_rate = int(rate * speed)
+    encoder = lameenc.Encoder()
+    encoder.set_bit_rate(128)
+    encoder.set_in_sample_rate(effective_rate)
+    encoder.set_channels(channels)
+    encoder.set_quality(2)  # 2 = high quality
+    return encoder.encode(pcm) + encoder.flush()
+
+
+async def _tts_groq(text: str, voice: str, speed: float = 1.0) -> bytes:
+    """Groq Orpheus TTS — very human-sounding, English only."""
+    from openai import OpenAI
+    sync_client = OpenAI(base_url="https://api.groq.com/openai/v1", api_key=GROQ_API_KEY)
+    def _call():
+        r = sync_client.audio.speech.create(
+            model="canopylabs/orpheus-v1-english",
+            voice=voice,
+            input=text,
+            response_format="wav",
+        )
+        return r.read()
+    wav_bytes = await asyncio.get_event_loop().run_in_executor(None, _call)
+    return _wav_to_mp3(wav_bytes, speed=speed)
+
+
+async def _tts_edge(text: str, voice: str, rate: str, pitch: str) -> bytes:
+    """Edge TTS — good for non-English languages."""
     import edge_tts
     buf = io.BytesIO()
-    tts = edge_tts.Communicate(text, voice=get_profile()["tts_voice"])
+    tts = edge_tts.Communicate(text, voice=voice, rate=rate, pitch=pitch)
     async for chunk in tts.stream():
         if chunk["type"] == "audio":
             buf.write(chunk["data"])
     return buf.getvalue()
+
+
+async def synthesize_audio(text: str) -> bytes:
+    """Route to the right TTS engine based on current tone."""
+    tone = get_tone()
+    engine = tone.get("tts_engine", "edge")
+    if engine == "groq":
+        return await _tts_groq(text, tone["voice"], speed=tone.get("speed", 1.0))
+    else:
+        return await _tts_edge(
+            text, tone["voice"],
+            tone.get("rate", "+0%"), tone.get("pitch", "+0Hz"),
+        )
 
 
 # ── Routes ─────────────────────────────────────────────────────────────────────
@@ -143,37 +327,62 @@ async def serve_ui():
 @app.get("/health")
 async def health():
     p = get_profile()
+    t = get_tone()
     return {
         "status":   "ok",
         "language": current_language,
+        "tone":     current_tone,
+        "tone_label": t["label"],
         "asr":      p["asr_model"],
-        "tts":      p["tts_voice"],
+        "tts":      t["voice"],
     }
 
 
 @app.get("/config")
 async def config():
-    """Frontend calls this to know the active language and available languages."""
+    """Frontend calls this to know the active language, tone, and available options."""
     p = get_profile()
+    t = get_tone()
+    lang_tones = TONES.get(current_language, TONES["english"])
     return {
         "language": current_language,
-        "tts_voice": p["tts_voice"],
-        "available": list(PROFILES.keys()),
+        "tone": current_tone,
+        "tone_label": t["label"],
+        "tts_voice": t["voice"],
+        "available_languages": list(PROFILES.keys()),
+        "available_tones": {k: v["label"] for k, v in lang_tones.items()},
     }
 
 
 @app.post("/language")
 async def switch_language(language: str = Form(...)):
     """Switch active language and clear conversation history."""
-    global current_language
+    global current_language, current_tone
     lang = language.strip().lower()
     if lang not in PROFILES:
         raise HTTPException(status_code=400, detail=f"Unknown language: {lang}. Available: {list(PROFILES.keys())}")
     current_language = lang
+    # Reset tone to first available for new language
+    current_tone = list(TONES.get(lang, TONES["english"]).keys())[0]
     history.clear()
-    p = get_profile()
-    logger.info(f"Switched to: {lang} | ASR: {p['asr_model']} | TTS: {p['tts_voice']}")
-    return {"language": lang, "tts_voice": p["tts_voice"]}
+    t = get_tone()
+    logger.info(f"Switched to: {lang} | Tone: {current_tone} ({t['label']}) | TTS: {t['voice']}")
+    return {"language": lang, "tone": current_tone, "tone_label": t["label"], "tts_voice": t["voice"]}
+
+
+@app.post("/tone")
+async def switch_tone(tone: str = Form(...)):
+    """Switch TTS tone/personality without changing language."""
+    global current_tone
+    lang_tones = TONES.get(current_language, TONES["english"])
+    t = tone.strip().lower()
+    if t not in lang_tones:
+        raise HTTPException(status_code=400, detail=f"Unknown tone: {t}. Available: {list(lang_tones.keys())}")
+    current_tone = t
+    history.clear()
+    tone_info = get_tone()
+    logger.info(f"Tone switched: {t} ({tone_info['label']}) | TTS: {tone_info['voice']}")
+    return {"tone": t, "label": tone_info["label"], "voice": tone_info["voice"]}
 
 
 @app.post("/transcribe")
@@ -219,7 +428,8 @@ async def chat(transcript: str = Form(...)):
 
     # Build message history
     history.append({"role": "user", "content": transcript})
-    messages = [{"role": "system", "content": get_profile()["system_prompt"]}]
+    tone = get_tone()
+    messages = [{"role": "system", "content": tone["system_prompt"]}]
     messages += history[-MAX_HISTORY:]
 
     # LLM call
@@ -228,7 +438,7 @@ async def chat(transcript: str = Form(...)):
         resp = await client.chat.completions.create(
             model="llama-3.3-70b-versatile",
             messages=messages,
-            max_tokens=150,        # short = fast + natural for conversation
+            max_tokens=200,        # [REPLY] + [LESSON] + [PROMPT] — keep it tight
             temperature=0.7,
         )
         reply = resp.choices[0].message.content.strip()
@@ -243,7 +453,7 @@ async def chat(transcript: str = Form(...)):
     # TTS synthesis
     t_tts = time.monotonic()
     try:
-        mp3_bytes = await synthesize_mp3(reply)
+        mp3_bytes = await synthesize_audio(reply)
     except Exception as e:
         logger.error(f"TTS error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
