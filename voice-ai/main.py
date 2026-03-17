@@ -107,9 +107,9 @@ TONES = {
     "english": {
         "chill": {
             "label": "Chill Friend",
-            "tts_engine": "groq",
-            "voice": "diana",
-            "speed": 1.15,
+            "tts_engine": "edge",
+            "voice": "en-US-AriaNeural",
+            "rate": "+10%", "pitch": "-1Hz",
             "system_prompt": """
 You are Max — a chill English buddy from California. Ultra relaxed, uses slang and contractions naturally ("y'know", "honestly"). Celebrates quietly ("nice, that's solid"), laughs off mistakes.
 
@@ -122,9 +122,9 @@ RULES: Max 3 sentences + 1 lesson + 1 prompt. One fix per turn. Never lecture. N
         },
         "hype": {
             "label": "Hype Coach",
-            "tts_engine": "groq",
-            "voice": "hannah",
-            "speed": 1.2,
+            "tts_engine": "edge",
+            "voice": "en-US-JennyNeural",
+            "rate": "+18%", "pitch": "+2Hz",
             "system_prompt": """
 You are Coach Sunny — an INCREDIBLY energetic English coach from New York. Celebrate EVERYTHING! ("Amazing!" "You crushed it!" "Let's GOOO!"). Mistakes are fun stepping stones.
 
@@ -137,9 +137,9 @@ RULES: Max 3 sentences + 1 lesson + 1 prompt. Celebrate before correcting. One f
         },
         "storyteller": {
             "label": "Storyteller",
-            "tts_engine": "groq",
-            "voice": "austin",
-            "speed": 1.1,
+            "tts_engine": "edge",
+            "voice": "en-US-GuyNeural",
+            "rate": "+5%", "pitch": "-2Hz",
             "system_prompt": """
 You are Grandpa Dave — a warm storyteller from Vermont. Everything reminds you of a story. You teach English by weaving lessons into tiny tales. Gentle humor, vivid imagery, dad jokes welcome.
 
@@ -152,9 +152,9 @@ RULES: Max 3 sentences + 1 lesson + 1 prompt. Micro-stories, not novels. One fix
         },
         "sassy": {
             "label": "Sassy Tutor",
-            "tts_engine": "groq",
-            "voice": "autumn",
-            "speed": 1.18,
+            "tts_engine": "edge",
+            "voice": "en-US-SaraNeural",
+            "rate": "+15%", "pitch": "+1Hz",
             "system_prompt": """
 You are Mia — a sharp, witty, lovably sassy English tutor from Chicago. You roast AND help. Tease mistakes lovingly ("Oh honey, no. Let me save you."), backhanded compliments ("Look at you using past perfect! Who ARE you?!"). Never actually mean.
 
@@ -277,17 +277,16 @@ def _wav_to_mp3(wav_bytes: bytes, speed: float = 1.0) -> bytes:
     return encoder.encode(pcm) + encoder.flush()
 
 
+MAX_TTS_CHARS = 60  # Keep TTS under ~500ms with edge-tts.
+
 def _strip_for_tts(text: str) -> str:
-    """Extract only the spoken parts ([REPLY] + [PROMPT]) for TTS.
-    Skip [LESSON] block entirely — user reads it, doesn't need to hear it.
-    This dramatically cuts TTS text length and synthesis time."""
+    """Extract short spoken text for TTS. Drops lesson blocks and emoji formatting.
+    Caps at MAX_TTS_CHARS to keep Orpheus TTS under ~1s."""
     import re
 
-    # Try to extract [REPLY]...[LESSON] and [PROMPT]... sections
-    # Keep REPLY and PROMPT, drop LESSON
+    # Try to extract [REPLY] and [PROMPT] sections, skip [LESSON]
     reply_match = re.search(r'\[REPLY\]\s*(.*?)(?=\[LESSON\]|\[PROMPT\]|$)', text, re.DOTALL | re.IGNORECASE)
     prompt_match = re.search(r'\[PROMPT\]\s*(.*?)$', text, re.DOTALL | re.IGNORECASE)
-
     # Chinese variants
     if not reply_match:
         reply_match = re.search(r'\[回复\]\s*(.*?)(?=\[课程\]|\[话题\]|$)', text, re.DOTALL)
@@ -303,13 +302,33 @@ def _strip_for_tts(text: str) -> str:
     if parts:
         result = ' '.join(parts)
     else:
-        # Fallback: LLM didn't use markers, just clean up emoji/brackets
-        result = text
+        # LLM didn't use markers — strip emoji lesson lines and keep first sentences
+        lines = text.split('\n')
+        spoken = []
+        for line in lines:
+            s = line.strip()
+            # Skip lines starting with lesson emoji markers
+            if s and not re.match(r'^[💬🗣✏️🔊🌍]', s):
+                spoken.append(s)
+        result = ' '.join(spoken)
 
-    # Clean remaining formatting artifacts
+    # Clean formatting artifacts
     result = re.sub(r'\[(?:REPLY|LESSON|PROMPT|回复|课程|话题)\]\s*', '', result)
     result = re.sub(r'[💬🗣✏️🔊🌍]\s*', '', result)
-    return result.strip()
+    result = result.strip()
+
+    # Cap length — truncate at last sentence boundary within limit
+    if len(result) > MAX_TTS_CHARS:
+        truncated = result[:MAX_TTS_CHARS]
+        # Try to cut at last sentence end
+        for sep in ['. ', '? ', '! ', '。', '？', '！']:
+            idx = truncated.rfind(sep)
+            if idx > 30:
+                truncated = truncated[:idx + 1]
+                break
+        result = truncated.strip()
+
+    return result
 
 
 async def _tts_groq(text: str, voice: str, speed: float = 1.0) -> bytes:
@@ -330,6 +349,7 @@ async def _tts_groq(text: str, voice: str, speed: float = 1.0) -> bytes:
 async def _tts_edge(text: str, voice: str, rate: str, pitch: str) -> bytes:
     """Edge TTS — good for non-English languages."""
     import edge_tts
+    text = _strip_for_tts(text)
     buf = io.BytesIO()
     tts = edge_tts.Communicate(text, voice=voice, rate=rate, pitch=pitch)
     async for chunk in tts.stream():
@@ -489,7 +509,7 @@ async def chat(transcript: str = Form(...)):
         resp = await client.chat.completions.create(
             model="llama-3.3-70b-versatile",
             messages=messages,
-            max_tokens=200,        # [REPLY] + [LESSON] + [PROMPT] — keep it tight
+            max_tokens=150,        # shorter = faster LLM response
             temperature=0.7,
         )
         reply = resp.choices[0].message.content.strip()
