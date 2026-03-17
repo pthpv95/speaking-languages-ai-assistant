@@ -104,7 +104,7 @@ TONES = {
             "label": "Chill Friend",
             "tts_engine": "groq",
             "voice": "diana",
-            "speed": 1.15,
+            "speed": 1.0,
             "system_prompt": """
 You are Max — a chill English buddy from California. Ultra relaxed, uses slang and contractions naturally ("y'know", "honestly"). Celebrates quietly ("nice, that's solid"), laughs off mistakes.
 
@@ -121,7 +121,7 @@ RULES: Max 3 sentences + 1 prompt. Lessons every 2-3 turns only. One fix per tur
             "label": "Hype Coach",
             "tts_engine": "groq",
             "voice": "hannah",
-            "speed": 1.2,
+            "speed": 1.0,
             "system_prompt": """
 You are Coach Sunny — an INCREDIBLY energetic English coach from New York. Celebrate EVERYTHING! ("Amazing!" "You crushed it!" "Let's GOOO!"). Mistakes are fun stepping stones.
 
@@ -138,7 +138,7 @@ RULES: Max 3 sentences + 1 prompt. Lessons every 2-3 turns only. Celebrate befor
             "label": "Storyteller",
             "tts_engine": "groq",
             "voice": "austin",
-            "speed": 1.1,
+            "speed": 1.0,
             "system_prompt": """
 You are Grandpa Dave — a warm storyteller from Vermont. Everything reminds you of a story. You teach English by weaving lessons into tiny tales. Gentle humor, vivid imagery, dad jokes welcome.
 
@@ -155,7 +155,7 @@ RULES: Max 3 sentences + 1 prompt. Lessons every 2-3 turns only. Micro-stories, 
             "label": "Sassy Tutor",
             "tts_engine": "groq",
             "voice": "autumn",
-            "speed": 1.18,
+            "speed": 1.0,
             "system_prompt": """
 You are Mia — a sharp, witty, lovably sassy English tutor from Chicago. You roast AND help. Tease mistakes lovingly ("Oh honey, no. Let me save you."), backhanded compliments ("Look at you using past perfect! Who ARE you?!"). Never actually mean.
 
@@ -174,7 +174,7 @@ RULES: Max 3 sentences + 1 prompt. Lessons every 2-3 turns only. One roast per t
             "label": "Chill",
             "tts_engine": "edge",
             "voice": "zh-CN-XiaoxiaoNeural",
-            "rate": "+12%", "pitch": "+0Hz",
+            "rate": "+0%", "pitch": "+0Hz",
             "system_prompt": """
 You are a chill Mandarin buddy. Reply in 1-2 short sentences in simplified Chinese.
 Ask a follow-up question. Keep it casual.
@@ -185,7 +185,7 @@ Only add a [LESSON] tip every 2-3 turns, not every response. First 2-3 turns: ju
             "label": "Hype",
             "tts_engine": "edge",
             "voice": "zh-CN-XiaoyiNeural",
-            "rate": "+20%", "pitch": "+3Hz",
+            "rate": "+0%", "pitch": "+0Hz",
             "system_prompt": """
 You are an energetic Mandarin coach! Celebrate everything! Reply in simplified Chinese.
 1-2 short sentences. Ask a question. High energy!
@@ -196,7 +196,7 @@ Only add a [LESSON] tip every 2-3 turns, not every response. First 2-3 turns: ju
             "label": "Storyteller",
             "tts_engine": "edge",
             "voice": "zh-CN-YunyangNeural",
-            "rate": "+8%", "pitch": "-1Hz",
+            "rate": "+0%", "pitch": "+0Hz",
             "system_prompt": """
 You are a warm storyteller teaching Mandarin. Weave lessons into tiny tales.
 Reply in simplified Chinese. 1-2 sentences. Ask a question.
@@ -207,7 +207,7 @@ Only add a [LESSON] tip every 2-3 turns, not every response. First 2-3 turns: ju
             "label": "Sassy",
             "tts_engine": "edge",
             "voice": "zh-CN-YunxiNeural",
-            "rate": "+15%", "pitch": "+1Hz",
+            "rate": "+0%", "pitch": "+0Hz",
             "system_prompt": """
 You are a witty, lovably sassy Mandarin tutor. Tease mistakes lovingly.
 Reply in simplified Chinese. 1-2 sentences. Ask a question.
@@ -339,7 +339,7 @@ async def _tts_edge(text: str, voice: str, rate: str, pitch: str) -> bytes:
     return buf.getvalue()
 
 
-EDGE_FALLBACK = {"voice": "en-US-AriaNeural", "rate": "+15%", "pitch": "+0Hz"}
+EDGE_FALLBACK = {"voice": "en-US-AriaNeural", "rate": "+0%", "pitch": "+0Hz"}
 
 async def synthesize_audio(text: str, language: str, tone: str) -> bytes:
     """Route to the right TTS engine based on conversation's language/tone."""
