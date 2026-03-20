@@ -1,27 +1,20 @@
 services:
   voice-ai:
     build: .
-    ports:
-      - "8080:8080"
-    env_file:
-      - .env          # supplies GROQ_API_KEY (and any other vars from your .env)
-    environment:
-      - DATA_DIR=/data
-    volumes:
-      - voice_data:/data    # persists DB, VAPID keys, push subscriptions
-    restart: unless-stopped
-
-    # Optional HTTPS — uncomment and place cert.pem + key.pem next to docker-compose.yml,
-    # then change the CMD in Dockerfile or override command here:
     command: >
       uvicorn main:app --host 0.0.0.0 --port 8443
       --ssl-certfile /certs/cert.pem --ssl-keyfile /certs/key.pem
     ports:
       - "8443:8443"
+    env_file:
+      - .env
+    environment:
+      - DATA_DIR=/data
     volumes:
       - voice_data:/data
       - ./cert.pem:/certs/cert.pem:ro
       - ./key.pem:/certs/key.pem:ro
+    restart: unless-stopped
 
 volumes:
   voice_data:
