@@ -1,0 +1,12 @@
+venv/
+__pycache__/
+*.pyc
+*.pyo
+.env
+voice_ai.db
+voice_ai.db-wal
+voice_ai.db-shm
+.vapid_private.pem
+.vapid_public_key.json
+.push_subs.json
+*.pem

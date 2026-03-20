@@ -15,6 +15,9 @@ Voice AI MVP Backend — Multi-user with conversation threads
 import asyncio, io, json, os, time, logging
 from pathlib import Path
 
+# Persistent data directory: override with DATA_DIR env var (used in Docker).
+_DATA_DIR = Path(os.environ.get("DATA_DIR", str(Path(__file__).parent)))
+
 from fastapi import FastAPI, UploadFile, File, Form, Request, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -727,8 +730,9 @@ async def serve_icon_512():
 # ── PWA: Push Notifications ───────────────────────────────────────────────────
 
 def _get_vapid_keys():
-    pub_path = Path(__file__).parent / ".vapid_public_key.json"
-    pem_path = Path(__file__).parent / ".vapid_private.pem"
+    _DATA_DIR.mkdir(parents=True, exist_ok=True)
+    pub_path = _DATA_DIR / ".vapid_public_key.json"
+    pem_path = _DATA_DIR / ".vapid_private.pem"
     if pub_path.exists() and pem_path.exists():
         pub_data = json.loads(pub_path.read_text())
         return {"private_pem_path": str(pem_path), "public_key": pub_data["public_key"]}
@@ -744,7 +748,7 @@ def _get_vapid_keys():
     return {"private_pem_path": str(pem_path), "public_key": public_key}
 
 VAPID_KEYS = _get_vapid_keys()
-_SUBS_FILE = Path(__file__).parent / ".push_subs.json"
+_SUBS_FILE = _DATA_DIR / ".push_subs.json"
 
 def _load_subs() -> list[dict]:
     if _SUBS_FILE.exists():

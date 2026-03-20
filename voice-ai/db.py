@@ -4,9 +4,11 @@ Manages users, conversations, and messages.
 """
 
 import aiosqlite
+import os
 from pathlib import Path
 
-DB_PATH = Path(__file__).parent / "voice_ai.db"
+_DATA_DIR = Path(os.environ.get("DATA_DIR", str(Path(__file__).parent)))
+DB_PATH = _DATA_DIR / "voice_ai.db"
 
 
 async def init_db():
