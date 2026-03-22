@@ -475,7 +475,7 @@ async def synthesize_audio(text: str, language: str, tone: str) -> tuple[bytes, 
     """Route to the right TTS engine. Returns (audio_bytes, mime_type)."""
     tone_cfg = get_tone_config(language, tone)
     engine = tone_cfg.get("tts_engine", "edge")
-    if engine == "piper" & language == "en":
+    if engine == "piper" and language == "en":
         try:
             wav = await _tts_piper(text, tone_cfg["voice"], speed=tone_cfg.get("speed", 1.0))
             return wav, "audio/wav"
