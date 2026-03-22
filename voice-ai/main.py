@@ -50,6 +50,32 @@ GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
 if not GROQ_API_KEY:
     raise RuntimeError("GROQ_API_KEY not set — check .env")
 
+# ── TTS engine override ──────────────────────────────────────────────────────
+# Set TTS_ENGINE env var to force ALL tones to use one engine: "piper", "edge", or "groq"
+# Leave unset (or "") to use the per-tone tts_engine defined in TONES below.
+TTS_ENGINE_OVERRIDE = os.environ.get("TTS_ENGINE", "").strip().lower() or None
+
+# Default voices per engine+language (used when TTS_ENGINE overrides the per-tone config)
+TTS_DEFAULTS = {
+    "piper": {
+        "english": {"voice": "en_US-kristin-medium", "speed": 1.0},
+        "chinese": {"voice": "en_US-kristin-medium", "speed": 1.0},  # piper has limited zh
+    },
+    "edge": {
+        "english": {"voice": "en-US-AriaNeural", "rate": "+0%", "pitch": "+0Hz"},
+        "chinese": {"voice": "zh-CN-XiaoxiaoNeural", "rate": "+0%", "pitch": "+0Hz"},
+    },
+    "groq": {
+        "english": {"voice": "diana", "speed": 1.0},
+        "chinese": {"voice": "diana", "speed": 1.0},  # groq is english-only
+    },
+}
+
+if TTS_ENGINE_OVERRIDE:
+    if TTS_ENGINE_OVERRIDE not in TTS_DEFAULTS:
+        raise RuntimeError(f"TTS_ENGINE={TTS_ENGINE_OVERRIDE!r} not valid. Use: piper, edge, groq")
+    logger.info(f"TTS engine override: {TTS_ENGINE_OVERRIDE}")
+
 # ── Language profiles ──────────────────────────────────────────────────────────
 
 PROFILES = {
@@ -106,7 +132,7 @@ TONES = {
         "chill": {
             "label": "Chill Friend",
             "tts_engine": "piper",
-            "voice": "en_US-lessac-low",
+            "voice": "en_US-kristin-medium",
             "speed": 1.0,
             "system_prompt": """
 You are Max — a chill English buddy from California. Ultra relaxed, uses slang and contractions naturally ("y'know", "honestly"). Celebrates quietly ("nice, that's solid"), laughs off mistakes.
@@ -123,7 +149,7 @@ RULES: Max 3 sentences + 1 prompt. Lessons every 2-3 turns only. One fix per tur
         "hype": {
             "label": "Hype Coach",
             "tts_engine": "piper",
-            "voice": "en_US-amy-low",
+            "voice": "en_US-kristin-medium",
             "speed": 1.0,
             "system_prompt": """
 You are Coach Sunny — an INCREDIBLY energetic English coach from New York. Celebrate EVERYTHING! ("Amazing!" "You crushed it!" "Let's GOOO!"). Mistakes are fun stepping stones.
@@ -140,7 +166,7 @@ RULES: Max 3 sentences + 1 prompt. Lessons every 2-3 turns only. Celebrate befor
         "storyteller": {
             "label": "Storyteller",
             "tts_engine": "piper",
-            "voice": "en_US-danny-low",
+            "voice": "en_US-kristin-medium",
             "speed": 1.0,
             "system_prompt": """
 You are Grandpa Dave — a warm storyteller from Vermont. Everything reminds you of a story. You teach English by weaving lessons into tiny tales. Gentle humor, vivid imagery, dad jokes welcome.
@@ -157,7 +183,7 @@ RULES: Max 3 sentences + 1 prompt. Lessons every 2-3 turns only. Micro-stories, 
         "sassy": {
             "label": "Sassy Tutor",
             "tts_engine": "piper",
-            "voice": "en_US-kristin-low",
+            "voice": "en_US-kristin-medium",
             "speed": 1.0,
             "system_prompt": """
 You are Mia — a sharp, witty, lovably sassy English tutor from Chicago. You roast AND help. Tease mistakes lovingly ("Oh honey, no. Let me save you."), backhanded compliments ("Look at you using past perfect! Who ARE you?!"). Never actually mean.
@@ -274,7 +300,17 @@ def get_profile(language: str) -> dict:
 
 def get_tone_config(language: str, tone: str) -> dict:
     lang_tones = TONES.get(language, TONES["english"])
-    return lang_tones.get(tone, list(lang_tones.values())[0])
+    cfg = lang_tones.get(tone, list(lang_tones.values())[0]).copy()
+
+    # Apply global TTS engine override
+    if TTS_ENGINE_OVERRIDE:
+        cfg["tts_engine"] = TTS_ENGINE_OVERRIDE
+        defaults = TTS_DEFAULTS.get(TTS_ENGINE_OVERRIDE, {}).get(language, {})
+        # Override voice/rate/pitch with engine defaults (tone-specific voice won't work across engines)
+        for k, v in defaults.items():
+            cfg[k] = v
+
+    return cfg
 
 
 # ── Helper: TTS synthesis ──────────────────────────────────────────────────────
@@ -407,11 +443,27 @@ async def _tts_piper(text: str, voice_name: str, speed: float = 1.0) -> bytes:
     logger.info(f"Piper TTS input: {len(tts_text)} chars -> {tts_text[:80]!r}")
 
     def _synthesize():
+        from piper import PiperVoice
+        from piper.config import SynthesisConfig
         voice = _get_piper_voice(voice_name)
-        wav_buf = io.BytesIO()
+        syn_config = SynthesisConfig(length_scale=1.0 / speed if speed else 1.0)
         import wave
-        with wave.open(wav_buf, "wb") as wf:
-            voice.synthesize_wav(tts_text, wf, length_scale=1.0 / speed if speed else 1.0)
+        wav_buf = io.BytesIO()
+        wf = wave.open(wav_buf, "wb")
+        first_chunk = True
+        for chunk in voice.synthesize(tts_text, syn_config=syn_config):
+            if first_chunk:
+                wf.setnchannels(chunk.sample_channels)
+                wf.setsampwidth(chunk.sample_width)
+                wf.setframerate(chunk.sample_rate)
+                first_chunk = False
+            wf.writeframes(chunk.audio_int16_bytes)
+        if first_chunk:
+            # No chunks produced — return empty WAV
+            wf.setnchannels(1)
+            wf.setsampwidth(2)
+            wf.setframerate(16000)
+        wf.close()
         return wav_buf.getvalue()
 
     return await asyncio.get_event_loop().run_in_executor(None, _synthesize)
@@ -507,6 +559,7 @@ async def config():
     return {
         "available_languages": list(PROFILES.keys()),
         "available_tones": available_tones,
+        "tts_engine_override": TTS_ENGINE_OVERRIDE,
     }
 
 
