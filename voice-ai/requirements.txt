@@ -5,6 +5,7 @@ openai>=1.30.0
 edge-tts
 aiosqlite
 lameenc
+piper-tts
 py_vapid
 pywebpush
 cryptography

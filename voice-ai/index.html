@@ -895,6 +895,9 @@ const state = {
 let mediaRecorder = null;
 let audioChunks = [];
 let recording = false;
+let chatSocket = null;       // WebSocket for streaming pipeline
+let audioQueue = [];         // queued audio blobs to play in order
+let isPlayingQueue = false;  // whether we're playing through the queue
 let timerInterval = null;
 let timerSeconds = 0;
 let activeAudio = null;
@@ -1255,6 +1258,111 @@ async function switchTone(tone) {
   }
 }
 
+// ── WebSocket helpers ─────────────────────────────────────────────────────────
+function getWsUrl() {
+  const proto = location.protocol === "https:" ? "wss:" : "ws:";
+  return `${proto}//${location.host}/ws/chat`;
+}
+
+function ensureSocket() {
+  return new Promise((resolve, reject) => {
+    if (chatSocket && chatSocket.readyState === WebSocket.OPEN) {
+      resolve(chatSocket);
+      return;
+    }
+    const ws = new WebSocket(getWsUrl());
+    ws.binaryType = "arraybuffer";
+    ws.onopen = () => { chatSocket = ws; resolve(ws); };
+    ws.onerror = (e) => { chatSocket = null; reject(e); };
+    ws.onclose = () => { chatSocket = null; };
+    ws.onmessage = handleWsMessage;
+  });
+}
+
+// ── Audio queue player ────────────────────────────────────────────────────────
+async function playNextInQueue() {
+  if (isPlayingQueue || audioQueue.length === 0) return;
+  isPlayingQueue = true;
+  setStatus("speaking...", "active");
+
+  while (audioQueue.length > 0) {
+    const { blob } = audioQueue.shift();
+    const url = URL.createObjectURL(blob);
+    await new Promise((resolve) => {
+      const audio = unlockedAudio || new Audio();
+      unlockedAudio = null;
+      activeAudio = audio;
+      audio.setAttribute('playsinline', '');
+      audio.src = url;
+      audio.onended = () => { URL.revokeObjectURL(url); activeAudio = null; resolve(); };
+      audio.onerror = () => { URL.revokeObjectURL(url); activeAudio = null; resolve(); };
+      audio.play().catch(() => resolve());
+    });
+  }
+
+  isPlayingQueue = false;
+  setStatus("");
+}
+
+// ── WS message state (shared across messages for one interaction) ─────────────
+let _wsT0 = 0;
+let _wsAsrMs = 0;
+let _wsAiBubble = null;  // the AI bubble DOM element we update progressively
+
+function handleWsMessage(event) {
+  if (typeof event.data === "string") {
+    const msg = JSON.parse(event.data);
+
+    if (msg.type === "transcript") {
+      _wsAsrMs = msg.asr_ms || 0;
+      setStep("asr", "done");
+      addBubble("user", msg.text);
+      setStep("llm", "active");
+      setStatus("thinking...");
+    }
+
+    else if (msg.type === "sentence") {
+      setStep("llm", "done");
+      setStep("tts", "active");
+      // Progressively build the AI bubble
+      if (!_wsAiBubble) {
+        _wsAiBubble = addBubble("ai", msg.text, true, true);
+      } else {
+        appendToBubble(_wsAiBubble, msg.text);
+      }
+    }
+
+    else if (msg.type === "audio") {
+      // Queue audio for playback
+      const audioBytes = Uint8Array.from(atob(msg.audio_base64), c => c.charCodeAt(0));
+      const audioBlob = new Blob([audioBytes], { type: msg.audio_mime || "audio/wav" });
+      audioQueue.push({ blob: audioBlob, index: msg.index });
+      // Start playing as soon as first audio arrives
+      playNextInQueue();
+    }
+
+    else if (msg.type === "done") {
+      setStep("tts", "done");
+      const endToEndMs = Math.round(performance.now() - _wsT0);
+      addLatencyBadge(endToEndMs, _wsAsrMs, msg.llm_ms, msg.tts_ms);
+      // Finalize the AI bubble with the full reply (handles [LESSON] formatting)
+      if (_wsAiBubble) {
+        finalizeBubble(_wsAiBubble, msg.reply);
+      }
+      _wsAiBubble = null;
+      showPipeline(false);
+      reset();
+      loadConversations();
+    }
+
+    else if (msg.type === "error") {
+      showError(msg.detail || "pipeline error");
+      showPipeline(false);
+      reset();
+    }
+  }
+}
+
 // ── Record toggle ──────────────────────────────────────────────────────────────
 async function toggleRecord() {
   if (recording) stopRecording();
@@ -1263,12 +1371,35 @@ async function toggleRecord() {
 
 async function startRecording() {
   if (activeAudio) { activeAudio.pause(); activeAudio = null; }
+  audioQueue = [];
+  isPlayingQueue = false;
+  _wsAiBubble = null;
+
+  if (!state.currentConvId) {
+    setStatus("no conversation selected", "error");
+    return;
+  }
 
   let stream;
   try {
     stream = await navigator.mediaDevices.getUserMedia({ audio: true });
   } catch (e) {
     setStatus("mic permission denied", "error");
+    return;
+  }
+
+  // Open WebSocket and send start signal
+  let ws;
+  try {
+    ws = await ensureSocket();
+    ws.send(JSON.stringify({
+      type: "start",
+      conversation_id: state.currentConvId,
+      username: state.username,
+    }));
+  } catch (e) {
+    setStatus("connection failed", "error");
+    stream.getTracks().forEach(t => t.stop());
     return;
   }
 
@@ -1285,13 +1416,26 @@ async function startRecording() {
   mediaRecorder = new MediaRecorder(stream, mimeType ? { mimeType } : {});
   audioChunks = [];
 
-  mediaRecorder.ondataavailable = e => { if (e.data.size > 0) audioChunks.push(e.data); };
+  // Stream audio chunks to server via WebSocket as they arrive
+  mediaRecorder.ondataavailable = async (e) => {
+    if (e.data.size > 0) {
+      audioChunks.push(e.data);
+      // Send binary chunk over WebSocket
+      if (ws.readyState === WebSocket.OPEN) {
+        const buf = await e.data.arrayBuffer();
+        ws.send(buf);
+      }
+    }
+  };
   mediaRecorder.onstop = () => {
     stream.getTracks().forEach(t => t.stop());
-    processAudio();
+    // Signal server that recording is done — triggers the pipeline
+    if (ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type: "stop" }));
+    }
   };
 
-  mediaRecorder.start(100);
+  mediaRecorder.start(250); // 250ms chunks for low-latency streaming
   recording = true;
 
   const btn = document.getElementById("record-btn");
@@ -1322,133 +1466,19 @@ function stopRecording() {
   mediaRecorder.stop();
   recording = false;
 
+  _wsT0 = performance.now();
+  showPipeline(true);
+  setStep("asr", "active");
+  setStatus("transcribing...");
+
   const btn = document.getElementById("record-btn");
   btn.classList.remove("recording");
   btn.textContent = "\uD83C\uDFA4";
   btn.disabled = true;
 }
 
-// ── Process audio ──────────────────────────────────────────────────────────────
-async function processAudio() {
-  const actualMime = mediaRecorder.mimeType || "audio/webm";
-  const blob = new Blob(audioChunks, { type: actualMime });
-
-  if (blob.size < 1000) {
-    setStatus("too short — try again", "error");
-    document.getElementById("record-btn").disabled = false;
-    return;
-  }
-
-  if (!state.currentConvId) {
-    setStatus("no conversation selected", "error");
-    document.getElementById("record-btn").disabled = false;
-    return;
-  }
-
-  showPipeline(true);
-  const t0 = performance.now();
-
-  // ── Step 1: ASR ──
-  setStep("asr", "active");
-  setStatus("transcribing...");
-
-  // Determine file extension from mime type for Whisper API
-  const ext = actualMime.includes('mp4') ? 'audio.mp4'
-    : actualMime.includes('ogg') ? 'audio.ogg'
-    : 'audio.webm';
-
-  let transcript;
-  try {
-    const formData = new FormData();
-    formData.append("audio", blob, ext);
-    formData.append("conversation_id", state.currentConvId);
-    const r = await api("/transcribe", { method: "POST", body: formData });
-    if (!r.ok) throw new Error(await r.text());
-    const data = await r.json();
-    transcript = data.transcript;
-  } catch (e) {
-    showError("ASR failed: " + e.message);
-    reset(); return;
-  }
-
-  const asrMs = Math.round(performance.now() - t0);
-  setStep("asr", "done");
-
-  if (!transcript) {
-    showError("Nothing heard — please try again");
-    reset(); return;
-  }
-
-  addBubble("user", transcript);
-
-  // ── Step 2+3: LLM + TTS ──
-  setStep("llm", "active");
-  setStatus("thinking...");
-
-  let reply, audioB64, audioMime, totalMs, llmMs, ttsMs;
-  try {
-    const formData = new FormData();
-    formData.append("transcript", transcript);
-    formData.append("conversation_id", state.currentConvId);
-    const r = await api("/chat", { method: "POST", body: formData });
-    if (!r.ok) throw new Error(await r.text());
-    const data = await r.json();
-    reply = data.reply;
-    audioB64 = data.audio_base64;
-    audioMime = data.audio_mime || "audio/mp3";
-    totalMs = data.total_ms;
-    llmMs = data.llm_ms;
-    ttsMs = data.tts_ms;
-  } catch (e) {
-    showError("LLM/TTS failed: " + e.message);
-    reset(); return;
-  }
-
-  setStep("llm", "done");
-  setStep("tts", "done");
-
-  const endToEndMs = Math.round(performance.now() - t0);
-
-  addBubble("ai", reply);
-  addLatencyBadge(endToEndMs, asrMs, llmMs, ttsMs);
-
-  // Update conversation title in sidebar if it was auto-set
-  await loadConversations();
-
-  // ── Play TTS audio ──
-  setStatus("speaking...", "active");
-  try {
-    const audioBytes = Uint8Array.from(atob(audioB64), c => c.charCodeAt(0));
-    const audioBlob = new Blob([audioBytes], { type: audioMime });
-    const url = URL.createObjectURL(audioBlob);
-
-    activeAudio = unlockedAudio || new Audio();
-    unlockedAudio = null;
-    activeAudio.setAttribute('playsinline', '');
-    activeAudio.src = url;
-    activeAudio.onended = () => {
-      URL.revokeObjectURL(url);
-      activeAudio = null;
-      setStatus("");
-    };
-    activeAudio.onerror = () => {
-      URL.revokeObjectURL(url);
-      activeAudio = null;
-      setStatus("");
-    };
-    await activeAudio.play();
-  } catch (e) {
-    console.error("[AUDIO] playback error:", e);
-    setStatus("audio playback error", "error");
-    activeAudio = null;
-  }
-
-  showPipeline(false);
-  reset();
-}
-
 // ── UI helpers ─────────────────────────────────────────────────────────────────
-function addBubble(role, text, animate = true) {
+function addBubble(role, text, animate = true, streaming = false) {
   const conv = document.getElementById("conversation");
   document.getElementById("empty")?.remove();
 
@@ -1457,31 +1487,58 @@ function addBubble(role, text, animate = true) {
   if (!animate) div.style.animation = 'none';
 
   if (role === "ai") {
-    div.innerHTML = formatAiMessage(text);
-    // Wire up lesson toggle buttons
-    div.querySelectorAll('.lesson-toggle').forEach(toggle => {
-      toggle.addEventListener('click', () => {
-        toggle.classList.toggle('open');
-        const content = toggle.nextElementSibling;
-        if (content) content.classList.toggle('open');
-      });
-    });
-    // Replay button
-    const replayBtn = document.createElement('button');
-    replayBtn.className = 'replay-btn';
-    replayBtn.innerHTML = '&#x1F50A;';
-    replayBtn.title = 'Replay';
-    replayBtn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      replayAudio(text, replayBtn);
-    });
-    div.appendChild(replayBtn);
+    if (streaming) {
+      // Streaming mode: plain text initially, will be finalized later
+      div.dataset.streamingText = text;
+      div.textContent = text;
+    } else {
+      div.innerHTML = formatAiMessage(text);
+      _wireUpBubble(div, text);
+    }
   } else {
     div.textContent = text;
   }
 
   conv.appendChild(div);
   requestAnimationFrame(() => { conv.scrollTop = conv.scrollHeight; });
+  return div;
+}
+
+function appendToBubble(div, text) {
+  const prev = div.dataset.streamingText || '';
+  div.dataset.streamingText = prev + ' ' + text;
+  div.textContent = div.dataset.streamingText;
+  const conv = document.getElementById("conversation");
+  requestAnimationFrame(() => { conv.scrollTop = conv.scrollHeight; });
+}
+
+function finalizeBubble(div, fullText) {
+  delete div.dataset.streamingText;
+  div.innerHTML = formatAiMessage(fullText);
+  _wireUpBubble(div, fullText);
+  const conv = document.getElementById("conversation");
+  requestAnimationFrame(() => { conv.scrollTop = conv.scrollHeight; });
+}
+
+function _wireUpBubble(div, text) {
+  // Wire up lesson toggle buttons
+  div.querySelectorAll('.lesson-toggle').forEach(toggle => {
+    toggle.addEventListener('click', () => {
+      toggle.classList.toggle('open');
+      const content = toggle.nextElementSibling;
+      if (content) content.classList.toggle('open');
+    });
+  });
+  // Replay button
+  const replayBtn = document.createElement('button');
+  replayBtn.className = 'replay-btn';
+  replayBtn.innerHTML = '&#x1F50A;';
+  replayBtn.title = 'Replay';
+  replayBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    replayAudio(text, replayBtn);
+  });
+  div.appendChild(replayBtn);
 }
 
 async function replayAudio(text, btn) {
