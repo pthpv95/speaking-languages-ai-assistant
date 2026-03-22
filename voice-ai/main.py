@@ -12,13 +12,13 @@ Voice AI MVP Backend — Multi-user with conversation threads
   PATCH /api/conversations/{id} — update title, language, or tone
 """
 
-import asyncio, io, json, os, time, logging
+import asyncio, base64, io, json, os, time, logging
 from pathlib import Path
 
 # Persistent data directory: override with DATA_DIR env var (used in Docker).
 _DATA_DIR = Path(os.environ.get("DATA_DIR", str(Path(__file__).parent)))
 
-from fastapi import FastAPI, UploadFile, File, Form, Request, HTTPException
+from fastapi import FastAPI, UploadFile, File, Form, Request, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from openai import AsyncOpenAI
@@ -479,7 +479,7 @@ async def tts_replay(
     ms = (time.monotonic() - t0) * 1000
     logger.info(f"TTS replay ({ms:.0f}ms)")
 
-    import base64
+
     return {"audio_base64": base64.b64encode(audio_bytes).decode(), "audio_mime": audio_mime, "tts_ms": round(ms)}
 
 
@@ -778,7 +778,7 @@ async def chat(
 
     logger.info(f"LLM={llm_ms:.0f}ms | TTS={tts_ms:.0f}ms | total={total_ms:.0f}ms")
 
-    import base64
+
     return {
         "reply":       reply,
         "audio_base64": base64.b64encode(audio_bytes).decode(),
@@ -787,6 +787,235 @@ async def chat(
         "tts_ms":      round(tts_ms),
         "total_ms":    round(total_ms),
     }
+
+
+# ── Streaming WebSocket pipeline ─────────────────────────────────────────────
+# Protocol:
+#   Client → Server:
+#     text: {"type":"start","conversation_id":123,"username":"alice"}
+#     binary: audio chunks (while recording)
+#     text: {"type":"stop"}
+#   Server → Client:
+#     text: {"type":"transcript","text":"..."}
+#     text: {"type":"sentence","text":"...","index":0}
+#     binary: WAV/MP3 audio for each sentence
+#     text: {"type":"done","reply":"full reply","llm_ms":...,"tts_ms":...,"total_ms":...}
+
+import re as _sentence_re
+
+_SENTENCE_SPLIT = _sentence_re.compile(
+    r'(?<=[.!?。！？])\s+|(?<=[.!?。！？])(?=[A-Z\u4e00-\u9fff\[])'
+)
+
+
+def _split_sentences(text: str) -> list[str]:
+    """Split text into sentences for progressive TTS."""
+    parts = _SENTENCE_SPLIT.split(text)
+    return [s.strip() for s in parts if s.strip()]
+
+
+@app.websocket("/ws/chat")
+async def ws_chat(websocket: WebSocket):
+    await websocket.accept()
+    audio_chunks: list[bytes] = []
+    conversation_id: int | None = None
+    username: str = ""
+
+    try:
+        while True:
+            msg = await websocket.receive()
+
+            # ── Binary frame: audio chunk ──
+            if "bytes" in msg and msg["bytes"]:
+                audio_chunks.append(msg["bytes"])
+                continue
+
+            # ── Text frame: JSON command ──
+            if "text" not in msg:
+                continue
+
+            data = json.loads(msg["text"])
+            msg_type = data.get("type")
+
+            if msg_type == "start":
+                audio_chunks.clear()
+                conversation_id = data.get("conversation_id")
+                username = data.get("username", "")
+                continue
+
+            if msg_type != "stop":
+                continue
+
+            # ── User stopped recording — run the pipeline ──
+            if not conversation_id or not username:
+                await websocket.send_json({"type": "error", "detail": "missing conversation_id or username"})
+                continue
+
+            t0 = time.monotonic()
+
+            # Look up user + conversation
+            user = await db.get_or_create_user(username)
+            conv = await db.get_conversation(conversation_id, user["id"])
+            if not conv:
+                await websocket.send_json({"type": "error", "detail": "conversation not found"})
+                continue
+
+            language = conv["language"]
+            tone = conv["tone"]
+            profile = get_profile(language)
+
+            # ── Step 1: ASR on buffered audio ──
+            full_audio = b"".join(audio_chunks)
+            audio_chunks.clear()
+
+            if len(full_audio) < 1000:
+                await websocket.send_json({"type": "error", "detail": "audio too short"})
+                continue
+
+            t_asr = time.monotonic()
+            try:
+                result = await client.audio.transcriptions.create(
+                    model=profile["asr_model"],
+                    file=("audio.webm", io.BytesIO(full_audio), "audio/webm"),
+                    language=profile["whisper_lang"],
+                    response_format="json",
+                    temperature=0.0,
+                )
+                transcript = result.text.strip()
+            except Exception as e:
+                logger.error(f"WS ASR error: {e}")
+                await websocket.send_json({"type": "error", "detail": f"ASR failed: {e}"})
+                continue
+
+            asr_ms = (time.monotonic() - t_asr) * 1000
+            logger.info(f"WS ASR ({asr_ms:.0f}ms): {transcript!r}")
+
+            if not transcript:
+                await websocket.send_json({"type": "error", "detail": "nothing heard"})
+                continue
+
+            await websocket.send_json({"type": "transcript", "text": transcript, "asr_ms": round(asr_ms)})
+
+            # Save user message + auto-title
+            await db.add_message(conversation_id, "user", transcript)
+            if conv["title"] == "New conversation":
+                title = transcript[:50].strip() + ("..." if len(transcript) > 50 else "")
+                await db.update_conversation_title(conversation_id, title)
+
+            # Build LLM messages
+            all_messages = await db.get_all_messages(conversation_id)
+            user_turn_count = sum(1 for m in all_messages if m["role"] == "user")
+
+            tone_cfg = get_tone_config(language, tone)
+            system_prompt = _build_system_prompt(tone_cfg["system_prompt"], user_turn_count)
+            messages = [{"role": "system", "content": system_prompt}]
+
+            summary = await _maybe_summarize(conversation_id, conv)
+            if summary:
+                messages.append({"role": "system", "content": f"Conversation so far: {summary}"})
+
+            recent = await db.get_messages(conversation_id, limit=RECENT_MESSAGES)
+            messages += [{"role": m["role"], "content": m["content"]} for m in recent]
+
+            # ── Step 2: Stream LLM tokens, TTS each sentence ──
+            t_llm = time.monotonic()
+            full_reply = ""
+            pending_text = ""  # text buffer waiting for a sentence boundary
+            sentence_idx = 0
+            t_tts_total = 0.0
+
+            try:
+                stream = await client.chat.completions.create(
+                    model="llama-3.3-70b-versatile",
+                    messages=messages,
+                    max_tokens=200,
+                    temperature=0.7,
+                    stream=True,
+                )
+
+                async for chunk in stream:
+                    delta = chunk.choices[0].delta.content
+                    if not delta:
+                        continue
+                    full_reply += delta
+                    pending_text += delta
+
+                    # Check if we have a complete sentence
+                    sentences = _split_sentences(pending_text)
+                    if len(sentences) > 1:
+                        # All but the last are complete sentences
+                        for sent in sentences[:-1]:
+                            await websocket.send_json({
+                                "type": "sentence",
+                                "text": sent,
+                                "index": sentence_idx,
+                            })
+                            # TTS this sentence immediately
+                            t_s = time.monotonic()
+                            try:
+                                audio_bytes, audio_mime = await synthesize_audio(sent, language, tone)
+                                t_tts_total += time.monotonic() - t_s
+                            
+                                await websocket.send_json({
+                                    "type": "audio",
+                                    "audio_base64": base64.b64encode(audio_bytes).decode(),
+                                    "audio_mime": audio_mime,
+                                    "index": sentence_idx,
+                                })
+                            except Exception as e:
+                                logger.warning(f"WS TTS error for sentence {sentence_idx}: {e}")
+                            sentence_idx += 1
+                        pending_text = sentences[-1]  # keep the incomplete part
+
+            except Exception as e:
+                logger.error(f"WS LLM error: {e}")
+                await websocket.send_json({"type": "error", "detail": f"LLM failed: {e}"})
+                continue
+
+            llm_ms = (time.monotonic() - t_llm) * 1000
+
+            # TTS any remaining text
+            if pending_text.strip():
+                await websocket.send_json({
+                    "type": "sentence",
+                    "text": pending_text.strip(),
+                    "index": sentence_idx,
+                })
+                t_s = time.monotonic()
+                try:
+                    audio_bytes, audio_mime = await synthesize_audio(pending_text.strip(), language, tone)
+                    t_tts_total += time.monotonic() - t_s
+                
+                    await websocket.send_json({
+                        "type": "audio",
+                        "audio_base64": base64.b64encode(audio_bytes).decode(),
+                        "audio_mime": audio_mime,
+                        "index": sentence_idx,
+                    })
+                except Exception as e:
+                    logger.warning(f"WS TTS error for final sentence: {e}")
+
+            # Save assistant reply
+            full_reply = full_reply.strip()
+            await db.add_message(conversation_id, "assistant", full_reply)
+
+            total_ms = (time.monotonic() - t0) * 1000
+            tts_ms = t_tts_total * 1000
+            logger.info(f"WS pipeline: ASR={asr_ms:.0f}ms LLM={llm_ms:.0f}ms TTS={tts_ms:.0f}ms total={total_ms:.0f}ms")
+
+            await websocket.send_json({
+                "type": "done",
+                "reply": full_reply,
+                "asr_ms": round(asr_ms),
+                "llm_ms": round(llm_ms),
+                "tts_ms": round(tts_ms),
+                "total_ms": round(total_ms),
+            })
+
+    except WebSocketDisconnect:
+        logger.info("WebSocket client disconnected")
+    except Exception as e:
+        logger.error(f"WebSocket error: {e}")
 
 
 # ── PWA: Static files ──────────────────────────────────────────────────────────
@@ -820,7 +1049,7 @@ def _get_vapid_keys():
         return {"private_pem_path": str(pem_path), "public_key": pub_data["public_key"]}
     from py_vapid import Vapid
     from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
-    import base64
+
     vapid = Vapid()
     vapid.generate_keys()
     raw_pub = vapid.public_key.public_bytes(Encoding.X962, PublicFormat.UncompressedPoint)
