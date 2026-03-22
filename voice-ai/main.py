@@ -105,8 +105,8 @@ TONES = {
     "english": {
         "chill": {
             "label": "Chill Friend",
-            "tts_engine": "groq",
-            "voice": "diana",
+            "tts_engine": "piper",
+            "voice": "en_US-lessac-low",
             "speed": 1.0,
             "system_prompt": """
 You are Max — a chill English buddy from California. Ultra relaxed, uses slang and contractions naturally ("y'know", "honestly"). Celebrates quietly ("nice, that's solid"), laughs off mistakes.
@@ -122,8 +122,8 @@ RULES: Max 3 sentences + 1 prompt. Lessons every 2-3 turns only. One fix per tur
         },
         "hype": {
             "label": "Hype Coach",
-            "tts_engine": "groq",
-            "voice": "hannah",
+            "tts_engine": "piper",
+            "voice": "en_US-amy-low",
             "speed": 1.0,
             "system_prompt": """
 You are Coach Sunny — an INCREDIBLY energetic English coach from New York. Celebrate EVERYTHING! ("Amazing!" "You crushed it!" "Let's GOOO!"). Mistakes are fun stepping stones.
@@ -139,8 +139,8 @@ RULES: Max 3 sentences + 1 prompt. Lessons every 2-3 turns only. Celebrate befor
         },
         "storyteller": {
             "label": "Storyteller",
-            "tts_engine": "groq",
-            "voice": "austin",
+            "tts_engine": "piper",
+            "voice": "en_US-danny-low",
             "speed": 1.0,
             "system_prompt": """
 You are Grandpa Dave — a warm storyteller from Vermont. Everything reminds you of a story. You teach English by weaving lessons into tiny tales. Gentle humor, vivid imagery, dad jokes welcome.
@@ -156,8 +156,8 @@ RULES: Max 3 sentences + 1 prompt. Lessons every 2-3 turns only. Micro-stories, 
         },
         "sassy": {
             "label": "Sassy Tutor",
-            "tts_engine": "groq",
-            "voice": "autumn",
+            "tts_engine": "piper",
+            "voice": "en_US-kristin-low",
             "speed": 1.0,
             "system_prompt": """
 You are Mia — a sharp, witty, lovably sassy English tutor from Chicago. You roast AND help. Tease mistakes lovingly ("Oh honey, no. Let me save you."), backhanded compliments ("Look at you using past perfect! Who ARE you?!"). Never actually mean.
@@ -226,6 +226,18 @@ Only add a [LESSON] tip every 2-3 turns, not every response. First 2-3 turns: ju
 async def startup():
     await db.init_db()
     logger.info("Database initialized")
+
+    # Pre-load all Piper voices in background so first request is fast
+    def _preload_piper():
+        for lang_tones in TONES.values():
+            for tone_cfg in lang_tones.values():
+                if tone_cfg.get("tts_engine") == "piper":
+                    try:
+                        _get_piper_voice(tone_cfg["voice"])
+                    except Exception as e:
+                        logger.warning(f"Failed to preload Piper voice {tone_cfg['voice']}: {e}")
+
+    asyncio.get_event_loop().run_in_executor(None, _preload_piper)
 
 # ── Groq clients ──────────────────────────────────────────────────────────────
 
@@ -350,28 +362,97 @@ async def _tts_edge(text: str, voice: str, rate: str, pitch: str) -> bytes:
     return buf.getvalue()
 
 
+_PIPER_MODELS_DIR = _DATA_DIR / "piper_models"
+_piper_voices: dict[str, object] = {}  # cache: voice_name -> PiperVoice
+
+
+def _ensure_piper_model(voice_name: str) -> Path:
+    """Download a Piper voice model from HuggingFace if not already cached."""
+    model_dir = _PIPER_MODELS_DIR / voice_name
+    onnx_path = model_dir / f"{voice_name}.onnx"
+    json_path = model_dir / f"{voice_name}.onnx.json"
+    if onnx_path.exists() and json_path.exists():
+        return onnx_path
+
+    model_dir.mkdir(parents=True, exist_ok=True)
+    # Parse voice_name like "en_US-lessac-medium" -> lang=en, region=en_US
+    parts = voice_name.split("-")
+    locale = parts[0]              # e.g. "en_US"
+    lang = locale.split("_")[0]    # e.g. "en"
+    base_url = f"https://huggingface.co/rhasspy/piper-voices/resolve/main/{lang}/{locale}/{'-'.join(parts[1:-1])}/{parts[-1]}"
+
+    import urllib.request
+    for fname in [f"{voice_name}.onnx", f"{voice_name}.onnx.json"]:
+        url = f"{base_url}/{fname}"
+        dest = model_dir / fname
+        logger.info(f"Downloading Piper model: {url}")
+        urllib.request.urlretrieve(url, dest)
+
+    return onnx_path
+
+
+def _get_piper_voice(voice_name: str):
+    """Load a PiperVoice, caching it for reuse."""
+    if voice_name not in _piper_voices:
+        from piper import PiperVoice
+        onnx_path = _ensure_piper_model(voice_name)
+        _piper_voices[voice_name] = PiperVoice.load(str(onnx_path))
+        logger.info(f"Loaded Piper voice: {voice_name}")
+    return _piper_voices[voice_name]
+
+
+async def _tts_piper(text: str, voice_name: str, speed: float = 1.0) -> bytes:
+    """Piper TTS — fast, local, offline TTS. Returns WAV bytes directly (no MP3 conversion)."""
+    tts_text = _strip_for_tts(text)
+    logger.info(f"Piper TTS input: {len(tts_text)} chars -> {tts_text[:80]!r}")
+
+    def _synthesize():
+        voice = _get_piper_voice(voice_name)
+        wav_buf = io.BytesIO()
+        import wave
+        with wave.open(wav_buf, "wb") as wf:
+            voice.synthesize_wav(tts_text, wf, length_scale=1.0 / speed if speed else 1.0)
+        return wav_buf.getvalue()
+
+    return await asyncio.get_event_loop().run_in_executor(None, _synthesize)
+
+
 EDGE_FALLBACK = {"voice": "en-US-AriaNeural", "rate": "+0%", "pitch": "+0Hz"}
 
-async def synthesize_audio(text: str, language: str, tone: str) -> bytes:
-    """Route to the right TTS engine based on conversation's language/tone."""
+async def synthesize_audio(text: str, language: str, tone: str) -> tuple[bytes, str]:
+    """Route to the right TTS engine. Returns (audio_bytes, mime_type)."""
     tone_cfg = get_tone_config(language, tone)
     engine = tone_cfg.get("tts_engine", "edge")
-    if engine == "groq":
+    if engine == "piper":
         try:
-            return await _tts_groq(text, tone_cfg["voice"], speed=tone_cfg.get("speed", 1.0))
+            wav = await _tts_piper(text, tone_cfg["voice"], speed=tone_cfg.get("speed", 1.0))
+            return wav, "audio/wav"
+        except Exception as e:
+            logger.warning(f"Piper TTS failed ({e}), falling back to edge-tts")
+            mp3 = await _tts_edge(
+                text, EDGE_FALLBACK["voice"],
+                EDGE_FALLBACK["rate"], EDGE_FALLBACK["pitch"],
+            )
+            return mp3, "audio/mp3"
+    elif engine == "groq":
+        try:
+            mp3 = await _tts_groq(text, tone_cfg["voice"], speed=tone_cfg.get("speed", 1.0))
+            return mp3, "audio/mp3"
         except Exception as e:
             if "rate_limit" in str(e) or "429" in str(e):
                 logger.warning("Groq TTS rate-limited, falling back to edge-tts")
-                return await _tts_edge(
+                mp3 = await _tts_edge(
                     text, EDGE_FALLBACK["voice"],
                     EDGE_FALLBACK["rate"], EDGE_FALLBACK["pitch"],
                 )
+                return mp3, "audio/mp3"
             raise
     else:
-        return await _tts_edge(
+        mp3 = await _tts_edge(
             text, tone_cfg["voice"],
             tone_cfg.get("rate", "+0%"), tone_cfg.get("pitch", "+0Hz"),
         )
+        return mp3, "audio/mp3"
 
 
 # ── On-demand TTS (replay) ─────────────────────────────────────────────────────
@@ -390,7 +471,7 @@ async def tts_replay(
 
     t0 = time.monotonic()
     try:
-        mp3_bytes = await synthesize_audio(text, conv["language"], conv["tone"])
+        audio_bytes, audio_mime = await synthesize_audio(text, conv["language"], conv["tone"])
     except Exception as e:
         logger.error(f"TTS replay error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -399,7 +480,7 @@ async def tts_replay(
     logger.info(f"TTS replay ({ms:.0f}ms)")
 
     import base64
-    return {"mp3_base64": base64.b64encode(mp3_bytes).decode(), "tts_ms": round(ms)}
+    return {"audio_base64": base64.b64encode(audio_bytes).decode(), "audio_mime": audio_mime, "tts_ms": round(ms)}
 
 
 # ── Static routes ─────────────────────────────────────────────────────────────
@@ -687,7 +768,7 @@ async def chat(
     # TTS synthesis
     t_tts = time.monotonic()
     try:
-        mp3_bytes = await synthesize_audio(reply, language, tone)
+        audio_bytes, audio_mime = await synthesize_audio(reply, language, tone)
     except Exception as e:
         logger.error(f"TTS error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -699,11 +780,12 @@ async def chat(
 
     import base64
     return {
-        "reply":      reply,
-        "mp3_base64": base64.b64encode(mp3_bytes).decode(),
-        "llm_ms":     round(llm_ms),
-        "tts_ms":     round(tts_ms),
-        "total_ms":   round(total_ms),
+        "reply":       reply,
+        "audio_base64": base64.b64encode(audio_bytes).decode(),
+        "audio_mime":  audio_mime,
+        "llm_ms":      round(llm_ms),
+        "tts_ms":      round(tts_ms),
+        "total_ms":    round(total_ms),
     }
 
 

@@ -1385,7 +1385,7 @@ async function processAudio() {
   setStep("llm", "active");
   setStatus("thinking...");
 
-  let reply, mp3b64, totalMs, llmMs, ttsMs;
+  let reply, audioB64, audioMime, totalMs, llmMs, ttsMs;
   try {
     const formData = new FormData();
     formData.append("transcript", transcript);
@@ -1394,7 +1394,8 @@ async function processAudio() {
     if (!r.ok) throw new Error(await r.text());
     const data = await r.json();
     reply = data.reply;
-    mp3b64 = data.mp3_base64;
+    audioB64 = data.audio_base64;
+    audioMime = data.audio_mime || "audio/mp3";
     totalMs = data.total_ms;
     llmMs = data.llm_ms;
     ttsMs = data.tts_ms;
@@ -1417,8 +1418,8 @@ async function processAudio() {
   // ── Play TTS audio ──
   setStatus("speaking...", "active");
   try {
-    const mp3Bytes = Uint8Array.from(atob(mp3b64), c => c.charCodeAt(0));
-    const audioBlob = new Blob([mp3Bytes], { type: "audio/mpeg" });
+    const audioBytes = Uint8Array.from(atob(audioB64), c => c.charCodeAt(0));
+    const audioBlob = new Blob([audioBytes], { type: audioMime });
     const url = URL.createObjectURL(audioBlob);
 
     activeAudio = unlockedAudio || new Audio();
@@ -1496,8 +1497,8 @@ async function replayAudio(text, btn) {
     if (!r.ok) throw new Error(await r.text());
     const data = await r.json();
 
-    const mp3Bytes = Uint8Array.from(atob(data.mp3_base64), c => c.charCodeAt(0));
-    const audioBlob = new Blob([mp3Bytes], { type: 'audio/mpeg' });
+    const audioBytes = Uint8Array.from(atob(data.audio_base64), c => c.charCodeAt(0));
+    const audioBlob = new Blob([audioBytes], { type: data.audio_mime || 'audio/mpeg' });
     const url = URL.createObjectURL(audioBlob);
 
     activeAudio = new Audio();
