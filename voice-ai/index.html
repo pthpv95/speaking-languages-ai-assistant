@@ -4,13 +4,30 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1">
-  <title>Voice AI Coach</title>
+  <title>Voice AI Coach — Practice Speaking with AI</title>
+  <meta name="description" content="Practice speaking English, Chinese, Spanish, French, and Japanese with an AI voice coach. Real-time conversation with instant feedback and pronunciation tips.">
+  <meta name="keywords" content="voice AI, language learning, speaking practice, AI coach, pronunciation">
+  <meta name="author" content="Voice AI">
+
+  <!-- Open Graph -->
+  <meta property="og:title" content="Voice AI Coach">
+  <meta property="og:description" content="Practice speaking with an AI voice coach. Real-time conversation with instant feedback.">
+  <meta property="og:type" content="website">
+  <meta property="og:image" content="/og-image.png">
+
+  <!-- Favicon: inline SVG so no extra file needed -->
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%230d1117'/><circle cx='50' cy='42' r='14' fill='none' stroke='%233fb950' stroke-width='5'/><rect x='47' y='56' width='6' height='12' rx='3' fill='%233fb950'/><path d='M32 48 Q32 72 50 72 Q68 72 68 48' fill='none' stroke='%233fb950' stroke-width='4' stroke-linecap='round'/><rect x='40' y='72' width='20' height='4' rx='2' fill='%233fb950'/></svg>">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
+
+  <!-- PWA -->
   <link rel="manifest" href="/manifest.json">
   <meta name="theme-color" content="#0d1117">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="Voice AI">
+  <meta name="apple-mobile-web-app-title" content="Voice AI Coach">
   <link rel="apple-touch-icon" href="/icon-192.png">
+
+  <!-- Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link
     href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@300;400;500&display=swap"
@@ -1120,6 +1137,7 @@ function goHome() {
 
 function showHomePage() {
   state.currentConvId = null;
+  document.title = 'Voice AI Coach — Practice Speaking with AI';
   document.getElementById('home-page').classList.remove('hidden');
   document.getElementById('chat-page').classList.add('hidden');
   renderConvList();
@@ -1400,7 +1418,7 @@ function renderLangToggle() {
 
 function updateLangUI(lang) {
   state.currentLanguage = lang;
-  document.title = `Voice AI — ${lang}`;
+  document.title = `Voice AI Coach — ${lang.charAt(0).toUpperCase() + lang.slice(1)}`;
   document.querySelectorAll('.lang-toggle-btn').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.lang === lang);
   });
