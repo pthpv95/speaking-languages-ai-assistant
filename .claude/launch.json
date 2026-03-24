@@ -1,0 +1,26 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "Voice AI Backend (HTTP)",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080", "--reload"],
+      "cwd": "voice-ai",
+      "port": 8080
+    },
+    {
+      "name": "Voice AI Backend (HTTPS)",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8443", "--ssl-keyfile=key.pem", "--ssl-certfile=cert.pem", "--reload"],
+      "cwd": "voice-ai",
+      "port": 8443
+    },
+    {
+      "name": "Expo (native-app)",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "start", "--", "--port", "8082"],
+      "cwd": "native-app",
+      "port": 8082
+    }
+  ]
+}
