@@ -1548,10 +1548,8 @@ function handleWsMessage(event) {
       setStatus("thinking...");
     }
 
-    else if (msg.type === "sentence") {
-      setStep("llm", "done");
-      setStep("tts", "active");
-      // Progressively build the AI bubble
+    else if (msg.type === "token") {
+      // Stream LLM tokens into the AI bubble progressively
       if (!_wsAiBubble) {
         _wsAiBubble = addBubble("ai", msg.text, true, true);
       } else {
@@ -1559,12 +1557,18 @@ function handleWsMessage(event) {
       }
     }
 
+    else if (msg.type === "sentence") {
+      // Full reply text received — LLM done, TTS starting
+      setStep("llm", "done");
+      setStep("tts", "active");
+      setStatus("synthesizing...");
+    }
+
     else if (msg.type === "audio") {
-      // Queue audio for playback
+      // Single audio for the full reply
       const audioBytes = Uint8Array.from(atob(msg.audio_base64), c => c.charCodeAt(0));
       const audioBlob = new Blob([audioBytes], { type: msg.audio_mime || "audio/wav" });
       audioQueue.push({ blob: audioBlob, index: msg.index });
-      // Start playing as soon as first audio arrives
       playNextInQueue();
     }
 

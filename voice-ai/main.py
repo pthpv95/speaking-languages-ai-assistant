@@ -850,21 +850,10 @@ async def chat(
 #     text: {"type":"stop"}
 #   Server → Client:
 #     text: {"type":"transcript","text":"..."}
-#     text: {"type":"sentence","text":"...","index":0}
-#     binary: WAV/MP3 audio for each sentence
+#     text: {"type":"token","text":"..."} (streamed LLM tokens)
+#     text: {"type":"sentence","text":"full reply","index":0}
+#     text: {"type":"audio","audio_base64":"...","audio_mime":"...","index":0} (single TTS for full reply)
 #     text: {"type":"done","reply":"full reply","llm_ms":...,"tts_ms":...,"total_ms":...}
-
-import re as _sentence_re
-
-_SENTENCE_SPLIT = _sentence_re.compile(
-    r'(?<=[.!?。！？])\s+|(?<=[.!?。！？])(?=[A-Z\u4e00-\u9fff\[])'
-)
-
-
-def _split_sentences(text: str) -> list[str]:
-    """Split text into sentences for progressive TTS."""
-    parts = _SENTENCE_SPLIT.split(text)
-    return [s.strip() for s in parts if s.strip()]
 
 
 @app.websocket("/ws/chat")
@@ -941,7 +930,7 @@ async def ws_chat(websocket: WebSocket):
                 continue
 
             asr_ms = (time.monotonic() - t_asr) * 1000
-            logger.info(f"WS ASR ({asr_ms:.0f}ms): {transcript!r}")
+            logger.info(f"WS [ASR] {asr_ms:.0f}ms | transcript: {transcript!r}")
 
             if not transcript:
                 await websocket.send_json({"type": "error", "detail": "nothing heard"})
@@ -970,12 +959,9 @@ async def ws_chat(websocket: WebSocket):
             recent = await db.get_messages(conversation_id, limit=RECENT_MESSAGES)
             messages += [{"role": m["role"], "content": m["content"]} for m in recent]
 
-            # ── Step 2: Stream LLM tokens, TTS each sentence ──
+            # ── Step 2: Stream LLM tokens, then TTS full reply at once ──
             t_llm = time.monotonic()
             full_reply = ""
-            pending_text = ""  # text buffer waiting for a sentence boundary
-            sentence_idx = 0
-            t_tts_total = 0.0
 
             try:
                 stream = await client.chat.completions.create(
@@ -991,34 +977,12 @@ async def ws_chat(websocket: WebSocket):
                     if not delta:
                         continue
                     full_reply += delta
-                    pending_text += delta
 
-                    # Check if we have a complete sentence
-                    sentences = _split_sentences(pending_text)
-                    if len(sentences) > 1:
-                        # All but the last are complete sentences
-                        for sent in sentences[:-1]:
-                            await websocket.send_json({
-                                "type": "sentence",
-                                "text": sent,
-                                "index": sentence_idx,
-                            })
-                            # TTS this sentence immediately
-                            t_s = time.monotonic()
-                            try:
-                                audio_bytes, audio_mime = await synthesize_audio(sent, language, tone)
-                                t_tts_total += time.monotonic() - t_s
-                            
-                                await websocket.send_json({
-                                    "type": "audio",
-                                    "audio_base64": base64.b64encode(audio_bytes).decode(),
-                                    "audio_mime": audio_mime,
-                                    "index": sentence_idx,
-                                })
-                            except Exception as e:
-                                logger.warning(f"WS TTS error for sentence {sentence_idx}: {e}")
-                            sentence_idx += 1
-                        pending_text = sentences[-1]  # keep the incomplete part
+                    # Stream each token to the client for real-time text display
+                    await websocket.send_json({
+                        "type": "token",
+                        "text": delta,
+                    })
 
             except Exception as e:
                 logger.error(f"WS LLM error: {e}")
@@ -1026,27 +990,32 @@ async def ws_chat(websocket: WebSocket):
                 continue
 
             llm_ms = (time.monotonic() - t_llm) * 1000
+            logger.info(f"WS [LLM] {llm_ms:.0f}ms | reply: {full_reply[:80]!r}")
 
-            # TTS any remaining text
-            if pending_text.strip():
-                await websocket.send_json({
-                    "type": "sentence",
-                    "text": pending_text.strip(),
-                    "index": sentence_idx,
-                })
+            # Send the complete sentence text
+            await websocket.send_json({
+                "type": "sentence",
+                "text": full_reply.strip(),
+                "index": 0,
+            })
+
+            # TTS the full reply in one call
+            t_tts_total = 0.0
+            if full_reply.strip():
                 t_s = time.monotonic()
                 try:
-                    audio_bytes, audio_mime = await synthesize_audio(pending_text.strip(), language, tone)
-                    t_tts_total += time.monotonic() - t_s
-                
+                    audio_bytes, audio_mime = await synthesize_audio(full_reply.strip(), language, tone)
+                    t_tts_total = time.monotonic() - t_s
+                    logger.info(f"WS [TTS] {t_tts_total * 1000:.0f}ms | audio: {len(audio_bytes)} bytes")
+
                     await websocket.send_json({
                         "type": "audio",
                         "audio_base64": base64.b64encode(audio_bytes).decode(),
                         "audio_mime": audio_mime,
-                        "index": sentence_idx,
+                        "index": 0,
                     })
                 except Exception as e:
-                    logger.warning(f"WS TTS error for final sentence: {e}")
+                    logger.warning(f"WS TTS error: {e}")
 
             # Save assistant reply
             full_reply = full_reply.strip()
@@ -1054,7 +1023,11 @@ async def ws_chat(websocket: WebSocket):
 
             total_ms = (time.monotonic() - t0) * 1000
             tts_ms = t_tts_total * 1000
-            logger.info(f"WS pipeline: ASR={asr_ms:.0f}ms LLM={llm_ms:.0f}ms TTS={tts_ms:.0f}ms total={total_ms:.0f}ms")
+            logger.info(
+                f"WS [TOTAL] {total_ms:.0f}ms | "
+                f"ASR={asr_ms:.0f}ms LLM={llm_ms:.0f}ms TTS={tts_ms:.0f}ms | "
+                f"{'🟢 FAST' if total_ms < 700 else '🟡 OK' if total_ms < 1000 else '🔴 SLOW'}"
+            )
 
             await websocket.send_json({
                 "type": "done",
