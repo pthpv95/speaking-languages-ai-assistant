@@ -25,6 +25,10 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "scheme": "voice-ai",
+    "plugins": [
+      "expo-router"
+    ]
   }
 }
