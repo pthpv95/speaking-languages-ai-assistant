@@ -12,7 +12,11 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "online.xibo.language",
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "Voice AI needs microphone access to record your speech for language coaching."
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -21,7 +25,11 @@
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "online.xibo.language",
+      "permissions": [
+        "RECORD_AUDIO"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -29,6 +37,12 @@
     "scheme": "voice-ai",
     "plugins": [
       "expo-router"
-    ]
+    ],
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "3fcfeb39-d59e-41b7-9349-bb04b9b18a73"
+      }
+    }
   }
 }
