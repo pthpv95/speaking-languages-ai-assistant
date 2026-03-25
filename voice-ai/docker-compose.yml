@@ -2,7 +2,7 @@ services:
   voice-ai:
     build: .
     command: >
-      uvicorn main:app --host 0.0.0.0 --port 8443
+      uvicorn app.main:app --host 0.0.0.0 --port 8443
       --ssl-certfile /certs/cert.pem --ssl-keyfile /certs/key.pem
     ports:
       - "8443:8443"

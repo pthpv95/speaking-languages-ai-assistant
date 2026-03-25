@@ -4,14 +4,14 @@
     {
       "name": "Voice AI Backend (HTTP)",
       "runtimeExecutable": "python",
-      "runtimeArgs": ["-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080", "--reload"],
+      "runtimeArgs": ["-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080", "--reload"],
       "cwd": "voice-ai",
       "port": 8080
     },
     {
       "name": "Voice AI Backend (HTTPS)",
       "runtimeExecutable": "python",
-      "runtimeArgs": ["-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8443", "--ssl-keyfile=key.pem", "--ssl-certfile=cert.pem", "--reload"],
+      "runtimeArgs": ["-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8443", "--ssl-keyfile=key.pem", "--ssl-certfile=cert.pem", "--reload"],
       "cwd": "voice-ai",
       "port": 8443
     },
