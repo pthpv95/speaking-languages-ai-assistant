@@ -1,5 +1,7 @@
 import { View, Text, StyleSheet, ScrollView } from "react-native";
 import { Stack } from "expo-router";
+import { StatCard } from "@/components/features/progress/StatCard";
+import { colors } from "@/constants/colors";
 
 export default function ProgressScreen() {
   return (
@@ -39,39 +41,19 @@ export default function ProgressScreen() {
   );
 }
 
-function StatCard({ label, value }: { label: string; value: string }) {
-  return (
-    <View style={styles.statCard}>
-      <Text style={styles.statValue}>{value}</Text>
-      <Text style={styles.statLabel}>{label}</Text>
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
-  scroll: { flex: 1, backgroundColor: "#fff" },
+  scroll: { flex: 1, backgroundColor: colors.background },
   content: { padding: 20, gap: 20 },
-  title: { fontSize: 28, fontWeight: "700", color: "#1a1a1a" },
-  subtitle: { fontSize: 16, color: "#666", marginTop: -12 },
+  title: { fontSize: 28, fontWeight: "700", color: colors.textPrimary },
+  subtitle: { fontSize: 16, color: colors.textSecondary, marginTop: -12 },
   statsRow: { flexDirection: "row", gap: 12 },
-  statCard: {
-    flex: 1,
-    backgroundColor: "#e8f5e9",
-    borderRadius: 12,
-    borderCurve: "continuous",
-    padding: 16,
-    alignItems: "center",
-    gap: 4,
-  },
-  statValue: { fontSize: 24, fontWeight: "700", color: "#2e7d32" },
-  statLabel: { fontSize: 13, color: "#666" },
   card: {
-    backgroundColor: "#f8f9fa",
+    backgroundColor: colors.cardBackground,
     borderRadius: 12,
     borderCurve: "continuous",
     padding: 16,
     gap: 10,
   },
-  cardTitle: { fontSize: 17, fontWeight: "600", color: "#1a1a1a" },
-  emptyText: { fontSize: 14, color: "#999", lineHeight: 20 },
+  cardTitle: { fontSize: 17, fontWeight: "600", color: colors.textPrimary },
+  emptyText: { fontSize: 14, color: colors.textMuted, lineHeight: 20 },
 });

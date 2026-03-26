@@ -1,4 +1,10 @@
-const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:8080";
+import { API_BASE } from "@/constants/config";
+import type {
+  HealthResponse,
+  ConfigResponse,
+  ChatResponse,
+  TranscribeResponse,
+} from "@/types/api.types";
 
 class ApiError extends Error {
   status: number;
@@ -26,33 +32,6 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
 
   return res.json() as Promise<T>;
 }
-
-// --- Typed API functions ---
-
-export type HealthResponse = {
-  status: string;
-  language: string;
-  asr: string;
-  tts_voice: string;
-};
-
-export type ConfigResponse = {
-  language: string;
-  tts_voice: string;
-};
-
-export type ChatResponse = {
-  reply: string;
-  mp3_base64: string;
-  llm_ms: number;
-  tts_ms: number;
-  total_ms: number;
-};
-
-export type TranscribeResponse = {
-  transcript: string;
-  error?: string;
-};
 
 export function fetchHealth(signal?: AbortSignal) {
   return apiFetch<HealthResponse>("/health", { signal });

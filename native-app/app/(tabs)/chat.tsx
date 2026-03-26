@@ -1,7 +1,9 @@
 import { View, Text, StyleSheet, ScrollView } from "react-native";
 import { Stack } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
-import { fetchConfig } from "../../lib/api";
+import { fetchConfig } from "@/services/api";
+import { MicButton } from "@/components/features/chat/MicButton";
+import { colors } from "@/constants/colors";
 
 export default function ChatScreen() {
   const config = useQuery({
@@ -28,9 +30,7 @@ export default function ChatScreen() {
         </View>
 
         <View style={styles.micArea}>
-          <View style={styles.micButton}>
-            <Text style={styles.micIcon}>🎙️</Text>
-          </View>
+          <MicButton />
           <Text style={styles.hint}>Tap to record · Tap again to send</Text>
         </View>
       </ScrollView>
@@ -39,24 +39,17 @@ export default function ChatScreen() {
 }
 
 const styles = StyleSheet.create({
-  scroll: { flex: 1, backgroundColor: "#fff" },
+  scroll: { flex: 1, backgroundColor: colors.background },
   content: { padding: 20, gap: 32, alignItems: "center", paddingTop: 60 },
   emptyState: { alignItems: "center", gap: 8, maxWidth: 300 },
   emoji: { fontSize: 48 },
-  heading: { fontSize: 22, fontWeight: "600", color: "#1a1a1a" },
-  body: { fontSize: 15, color: "#666", textAlign: "center", lineHeight: 22 },
-  micArea: { alignItems: "center", gap: 14, marginTop: 20 },
-  micButton: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: "#e8f5e9",
-    borderWidth: 2,
-    borderColor: "#4caf50",
-    alignItems: "center",
-    justifyContent: "center",
-    borderCurve: "continuous",
+  heading: { fontSize: 22, fontWeight: "600", color: colors.textPrimary },
+  body: {
+    fontSize: 15,
+    color: colors.textSecondary,
+    textAlign: "center",
+    lineHeight: 22,
   },
-  micIcon: { fontSize: 32 },
-  hint: { fontSize: 13, color: "#999" },
+  micArea: { alignItems: "center", gap: 14, marginTop: 20 },
+  hint: { fontSize: 13, color: colors.textMuted },
 });
