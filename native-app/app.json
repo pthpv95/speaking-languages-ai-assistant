@@ -36,7 +36,10 @@
     },
     "scheme": "voice-ai",
     "plugins": [
-      "expo-router"
+      "expo-router",
+      "expo-font",
+      "expo-audio",
+      "expo-asset"
     ],
     "extra": {
       "router": {},
