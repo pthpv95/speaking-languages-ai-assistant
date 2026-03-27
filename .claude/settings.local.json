@@ -15,7 +15,8 @@
       "Bash(node /Users/hienpham/.claude/skills/heroui-native/scripts/get_component_docs.mjs BottomSheet)",
       "Bash(node -e \"const h = require\\(''heroui-native''\\); console.log\\(Object.keys\\(h\\).filter\\(k => k.toLowerCase\\(\\).includes\\(''bottom''\\) || k.toLowerCase\\(\\).includes\\(''sheet''\\)\\)\\)\")",
       "Bash(git add:*)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(echo:*)"
     ]
   }
 }

@@ -4,7 +4,11 @@ import type {
   ConfigResponse,
   ChatResponse,
   TranscribeResponse,
+  UserResponse,
+  ConversationResponse,
 } from "@/types/api.types";
+
+const DEFAULT_USERNAME = "mobile-user";
 
 class ApiError extends Error {
   status: number;
@@ -15,12 +19,16 @@ class ApiError extends Error {
   }
 }
 
+function authHeaders(): Record<string, string> {
+  return { "X-Username": DEFAULT_USERNAME };
+}
+
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const url = `${API_BASE}${path}`;
   const res = await fetch(url, {
     ...init,
     headers: {
-      "Content-Type": "application/json",
+      ...authHeaders(),
       ...init?.headers,
     },
   });
@@ -41,10 +49,41 @@ export function fetchConfig(signal?: AbortSignal) {
   return apiFetch<ConfigResponse>("/config", { signal });
 }
 
-export function postChat(transcript: string, signal?: AbortSignal) {
+export function createUser(username: string) {
+  return apiFetch<UserResponse>("/api/users", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username }),
+  });
+}
+
+export function createConversation(language: string, tone?: string) {
+  return apiFetch<ConversationResponse>("/api/conversations", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ language, tone: tone ?? "friendly" }),
+  });
+}
+
+export function listConversations() {
+  return apiFetch<ConversationResponse[]>("/api/conversations");
+}
+
+export function postTranscribe(
+  fileUri: string,
+  conversationId?: number,
+  signal?: AbortSignal,
+) {
   const form = new FormData();
-  form.append("transcript", transcript);
-  return apiFetch<ChatResponse>("/chat", {
+  form.append("audio", {
+    uri: fileUri,
+    name: "audio.m4a",
+    type: "audio/m4a",
+  } as unknown as Blob);
+  if (conversationId != null) {
+    form.append("conversation_id", String(conversationId));
+  }
+  return apiFetch<TranscribeResponse>("/transcribe", {
     method: "POST",
     headers: {},
     body: form,
@@ -52,10 +91,15 @@ export function postChat(transcript: string, signal?: AbortSignal) {
   });
 }
 
-export function postTranscribe(audioBlob: Blob, signal?: AbortSignal) {
+export function postChat(
+  transcript: string,
+  conversationId: number,
+  signal?: AbortSignal,
+) {
   const form = new FormData();
-  form.append("audio", audioBlob, "audio.webm");
-  return apiFetch<TranscribeResponse>("/transcribe", {
+  form.append("transcript", transcript);
+  form.append("conversation_id", String(conversationId));
+  return apiFetch<ChatResponse>("/chat", {
     method: "POST",
     headers: {},
     body: form,

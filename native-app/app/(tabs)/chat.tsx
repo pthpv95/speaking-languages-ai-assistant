@@ -1,55 +1,83 @@
-import { View, Text, StyleSheet, ScrollView } from "react-native";
+import { useRef } from "react";
+import { View, Text, StyleSheet, ScrollView, Pressable } from "react-native";
 import { Stack } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 import { fetchConfig } from "@/services/api";
-import { MicButton } from "@/components/features/chat/MicButton";
+import { ChatEmptyState } from "@/components/features/chat/ChatEmptyState";
+import { MessageBubble } from "@/components/features/chat/MessageBubble";
+import { RecordingControls } from "@/components/features/chat/RecordingControls";
+import { useVoiceChat } from "@/hooks/useVoiceChat";
 import { colors } from "@/constants/colors";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function ChatScreen() {
+  const scrollRef = useRef<ScrollView>(null);
+
   const config = useQuery({
     queryKey: ["config"],
     queryFn: ({ signal }) => fetchConfig(signal),
   });
 
-  return (
-    <>
-      <Stack.Screen options={{ title: "Chat" }} />
-      <ScrollView
-        style={styles.scroll}
-        contentContainerStyle={styles.content}
-        contentInsetAdjustmentBehavior="automatic"
-      >
-        <View style={styles.emptyState}>
-          <Text style={styles.emoji}>🎤</Text>
-          <Text style={styles.heading}>Start a conversation</Text>
-          <Text style={styles.body}>
-            Tap the microphone button below to record your voice. The AI coach
-            will listen and respond in{" "}
-            {config.data?.language ?? "your target language"}.
-          </Text>
-        </View>
+  const { messages, error, statusText, toggleRecording, replayAudio, clearChat } =
+    useVoiceChat(config.data?.available_languages?.[0]);
 
-        <View style={styles.micArea}>
-          <MicButton />
-          <Text style={styles.hint}>Tap to record · Tap again to send</Text>
-        </View>
-      </ScrollView>
-    </>
+  return (
+    <SafeAreaView style={{ flex: 1 }}>
+      <Stack.Screen
+        options={{
+          title: "Chat",
+          headerRight: () => (
+            <Pressable onPress={clearChat} style={styles.clearBtn}>
+              <Text style={styles.clearBtnText}>Clear</Text>
+            </Pressable>
+          ),
+        }}
+      />
+
+      <View style={styles.container}>
+        <ScrollView
+          ref={scrollRef}
+          style={styles.scroll}
+          contentContainerStyle={styles.scrollContent}
+          onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: true })}
+        >
+          {messages.length === 0 && !error ? (
+            <ChatEmptyState />
+          ) : (
+            messages.map((msg, i) => (
+              <MessageBubble key={i} message={msg} onReplay={replayAudio} />
+            ))
+          )}
+
+          {error && (
+            <View style={styles.errorBubble}>
+              <Text style={styles.errorText}>{error}</Text>
+            </View>
+          )}
+        </ScrollView>
+
+        <RecordingControls
+          statusText={statusText}
+          onToggleRecording={toggleRecording}
+        />
+      </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  scroll: { flex: 1, backgroundColor: colors.background },
-  content: { padding: 20, gap: 32, alignItems: "center", paddingTop: 60 },
-  emptyState: { alignItems: "center", gap: 8, maxWidth: 300 },
-  emoji: { fontSize: 48 },
-  heading: { fontSize: 22, fontWeight: "600", color: colors.textPrimary },
-  body: {
-    fontSize: 15,
-    color: colors.textSecondary,
-    textAlign: "center",
-    lineHeight: 22,
+  container: { flex: 1, backgroundColor: colors.background },
+  scroll: { flex: 1 },
+  scrollContent: { padding: 16, gap: 12, paddingBottom: 8 },
+  errorBubble: {
+    alignSelf: "flex-start",
+    padding: 10,
+    borderRadius: 12,
+    backgroundColor: "#fef2f2",
+    borderWidth: 1,
+    borderColor: "#fecaca",
   },
-  micArea: { alignItems: "center", gap: 14, marginTop: 20 },
-  hint: { fontSize: 13, color: colors.textMuted },
+  errorText: { fontSize: 13, color: colors.error },
+  clearBtn: { paddingHorizontal: 12, paddingVertical: 4 },
+  clearBtnText: { fontSize: 14, color: colors.error },
 });
