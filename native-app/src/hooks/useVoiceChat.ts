@@ -33,15 +33,17 @@ const RECORDING_OPTIONS = {
   },
 };
 
-export function useVoiceChat(language = "english") {
+export function useVoiceChat(language: string | null) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [statusText, setStatusText] = useState("ready");
+  const [statusText, setStatusText] = useState(
+    language ? "ready" : "loading language...",
+  );
   const [audioSource, setAudioSource] = useState<string | null>(null);
   const [shouldPlay, setShouldPlay] = useState(false);
 
-  const conversationIdRef = useRef<number | null>(null);
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const conversationIdRef = useRef<number | null>(6);//hard code for now
+  const isTransitioningRef = useRef(false);
 
   const { setRecordingState, setTimerSeconds, setIsPlaying, reset } = useAppStore();
 
@@ -71,55 +73,82 @@ export function useVoiceChat(language = "english") {
   // Detect playback finished
   useEffect(() => {
     if (playerStatus.didJustFinish) {
+      setRecordingState("idle");
+      setTimerSeconds(0);
       setIsPlaying(false);
       setStatusText("ready");
     }
-  }, [playerStatus.didJustFinish, setIsPlaying]);
+  }, [playerStatus.didJustFinish, setIsPlaying, setRecordingState, setTimerSeconds]);
 
-  // Cleanup timer on unmount
   useEffect(() => {
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-    };
-  }, []);
+    conversationIdRef.current = null;
+    setError(null);
+    setStatusText(language ? "ready" : "loading language...");
+  }, [language]);
 
   const ensureConversation = useCallback(async () => {
     if (conversationIdRef.current != null) return conversationIdRef.current;
     await createUser("mobile-user");
+    if (!language) {
+      throw new Error("Language is still loading");
+    }
     const conv = await createConversation(language);
     conversationIdRef.current = conv.id;
     return conv.id;
   }, [language]);
 
   const startRecording = useCallback(async () => {
-    setError(null);
-
-    // Stop any playing audio (barge-in)
-    if (playerStatus.playing) {
-      player.pause();
-      setIsPlaying(false);
-    }
-
-    const { granted } = await requestRecordingPermissionsAsync();
-    if (!granted) {
-      setError("Microphone permission denied");
+    if (isTransitioningRef.current) return;
+    if (!language) {
+      setError("Language is still loading");
+      setStatusText("loading language...");
       return;
     }
 
-    await setAudioModeAsync({
-      playsInSilentMode: true,
-      allowsRecording: true,
-    });
+    isTransitioningRef.current = true;
+    setError(null);
 
-    await recorder.prepareToRecordAsync();
-    recorder.record();
+    try {
+      // Stop any playing audio (barge-in)
+      if (playerStatus.playing) {
+        player.pause();
+        setIsPlaying(false);
+      }
 
-    setRecordingState("recording");
-    setStatusText("recording...");
-    setTimerSeconds(0);
-  }, [player, playerStatus.playing, recorder, setRecordingState, setTimerSeconds, setIsPlaying]);
+      const { granted } = await requestRecordingPermissionsAsync();
+      if (!granted) {
+        setError("Microphone permission denied");
+        setStatusText("ready");
+        return;
+      }
+
+      await setAudioModeAsync({
+        playsInSilentMode: true,
+        allowsRecording: true,
+      });
+
+      await recorder.prepareToRecordAsync();
+      recorder.record();
+
+      setRecordingState("recording");
+      setStatusText("recording...");
+      setTimerSeconds(0);
+    } finally {
+      isTransitioningRef.current = false;
+    }
+  }, [
+    language,
+    player,
+    playerStatus.playing,
+    recorder,
+    setRecordingState,
+    setTimerSeconds,
+    setIsPlaying,
+  ]);
 
   const stopAndProcess = useCallback(async () => {
+    if (isTransitioningRef.current) return;
+    isTransitioningRef.current = true;
     setRecordingState("processing");
     setStatusText("transcribing...");
 
@@ -163,6 +192,8 @@ export function useVoiceChat(language = "english") {
       setMessages((prev) => [...prev, aiMessage]);
 
       // Step 3: Play audio response
+      setRecordingState("idle");
+      setTimerSeconds(0);
       setStatusText("speaking...");
       setIsPlaying(true);
       const dataUri = `data:${chatResult.audio_mime};base64,${chatResult.audio_base64}`;
@@ -173,10 +204,20 @@ export function useVoiceChat(language = "english") {
       setError(msg);
       reset();
       setStatusText("ready");
+    } finally {
+      isTransitioningRef.current = false;
     }
-  }, [recorder, ensureConversation, reset, setRecordingState, setIsPlaying, player]);
+  }, [
+    recorder,
+    ensureConversation,
+    reset,
+    setRecordingState,
+    setTimerSeconds,
+    setIsPlaying,
+  ]);
 
   const toggleRecording = useCallback(async () => {
+    if (isTransitioningRef.current) return;
     if (recorderState.isRecording) {
       await stopAndProcess();
     } else {

@@ -6,6 +6,7 @@ import { colors } from "@/constants/colors";
 type RecordingControlsProps = {
   statusText: string;
   onToggleRecording: () => void;
+  disabled?: boolean;
 };
 
 function formatTimer(secs: number) {
@@ -17,6 +18,7 @@ function formatTimer(secs: number) {
 export function RecordingControls({
   statusText,
   onToggleRecording,
+  disabled = false,
 }: RecordingControlsProps) {
   const recordingState = useAppStore((s) => s.recordingState);
   const timerSeconds = useAppStore((s) => s.timerSeconds);
@@ -27,7 +29,7 @@ export function RecordingControls({
         <Text style={styles.timer}>{formatTimer(timerSeconds)}</Text>
       )}
 
-      <MicButton onPress={onToggleRecording} />
+      <MicButton onPress={onToggleRecording} disabled={disabled} />
 
       <Text
         style={[
@@ -46,12 +48,15 @@ export function RecordingControls({
 
 const styles = StyleSheet.create({
   controls: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
     alignItems: "center",
     gap: 10,
-    paddingVertical: 16,
+    paddingTop: 16,
     paddingBottom: 32,
-    borderTopWidth: 1,
-    borderTopColor: "#f0f0f0",
+    paddingHorizontal: 24,
     backgroundColor: colors.background,
   },
   timer: {

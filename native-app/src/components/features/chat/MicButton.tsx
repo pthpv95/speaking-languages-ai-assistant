@@ -4,12 +4,13 @@ import { useAppStore } from "@/stores/appStore";
 
 type MicButtonProps = {
   onPress?: () => void;
+  disabled?: boolean;
 };
 
-export function MicButton({ onPress }: MicButtonProps) {
+export function MicButton({ onPress, disabled = false }: MicButtonProps) {
   const recordingState = useAppStore((s) => s.recordingState);
   const isRecording = recordingState === "recording";
-  const isProcessing = recordingState === "processing";
+  const isProcessing = recordingState === "processing" || disabled;
 
   return (
     <Pressable

@@ -8,21 +8,23 @@ import { MessageBubble } from "@/components/features/chat/MessageBubble";
 import { RecordingControls } from "@/components/features/chat/RecordingControls";
 import { useVoiceChat } from "@/hooks/useVoiceChat";
 import { colors } from "@/constants/colors";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
 export default function ChatScreen() {
   const scrollRef = useRef<ScrollView>(null);
+  const insets = useSafeAreaInsets();
 
   const config = useQuery({
     queryKey: ["config"],
     queryFn: ({ signal }) => fetchConfig(signal),
   });
 
+  const selectedLanguage = config.data?.available_languages?.[0] ?? null;
   const { messages, error, statusText, toggleRecording, replayAudio, clearChat } =
-    useVoiceChat(config.data?.available_languages?.[0]);
+    useVoiceChat(selectedLanguage);
 
   return (
-    <SafeAreaView style={{ flex: 1 }}>
+    <SafeAreaView style={{ flex: 1 }} edges={["top", "left", "right"]}>
       <Stack.Screen
         options={{
           title: "Chat",
@@ -38,7 +40,10 @@ export default function ChatScreen() {
         <ScrollView
           ref={scrollRef}
           style={styles.scroll}
-          contentContainerStyle={styles.scrollContent}
+          contentContainerStyle={[
+            styles.scrollContent,
+            { paddingBottom: 220 + insets.bottom },
+          ]}
           onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: true })}
         >
           {messages.length === 0 && !error ? (
@@ -59,6 +64,7 @@ export default function ChatScreen() {
         <RecordingControls
           statusText={statusText}
           onToggleRecording={toggleRecording}
+          disabled={!selectedLanguage}
         />
       </View>
     </SafeAreaView>
@@ -68,7 +74,7 @@ export default function ChatScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   scroll: { flex: 1 },
-  scrollContent: { padding: 16, gap: 12, paddingBottom: 8 },
+  scrollContent: { padding: 16, gap: 12, paddingTop: 20 },
   errorBubble: {
     alignSelf: "flex-start",
     padding: 10,
