@@ -32,12 +32,20 @@ export type UserResponse = {
 
 export type ConversationResponse = {
   id: number;
-  user_id: number;
+  title: string;
   language: string;
   tone: string;
-  title: string | null;
-  created_at: string;
   updated_at: string;
+};
+
+export type ConversationMessageResponse = {
+  role: string;
+  content: string;
+  created_at?: string | null;
+};
+
+export type ConversationDetailResponse = ConversationResponse & {
+  messages: ConversationMessageResponse[];
 };
 
 export type ChatMessage = {

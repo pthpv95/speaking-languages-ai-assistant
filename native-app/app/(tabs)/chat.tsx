@@ -1,14 +1,28 @@
-import { useRef } from "react";
+import { useMemo, useRef } from "react";
 import { View, Text, StyleSheet, ScrollView, Pressable } from "react-native";
 import { Stack } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
-import { fetchConfig } from "@/services/api";
+import { fetchConfig, fetchConversation } from "@/services/api";
 import { ChatEmptyState } from "@/components/features/chat/ChatEmptyState";
 import { MessageBubble } from "@/components/features/chat/MessageBubble";
 import { RecordingControls } from "@/components/features/chat/RecordingControls";
 import { useVoiceChat } from "@/hooks/useVoiceChat";
 import { colors } from "@/constants/colors";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import type { ChatMessage } from "@/types/api.types";
+
+const CONVERSATION_ID = 6;
+
+function mapConversationMessages(
+  messages: { role: string; content: string }[] | undefined,
+): ChatMessage[] {
+  return (messages ?? [])
+    .filter((message) => message.role === "user" || message.role === "assistant")
+    .map((message) => ({
+      role: message.role === "assistant" ? "ai" : "user",
+      text: message.content,
+    }));
+}
 
 export default function ChatScreen() {
   const scrollRef = useRef<ScrollView>(null);
@@ -18,10 +32,22 @@ export default function ChatScreen() {
     queryKey: ["config"],
     queryFn: ({ signal }) => fetchConfig(signal),
   });
+  const conversation = useQuery({
+    queryKey: ["conversation", CONVERSATION_ID],
+    queryFn: ({ signal }) => fetchConversation(CONVERSATION_ID, signal),
+  });
 
-  const selectedLanguage = config.data?.available_languages?.[0] ?? null;
+  const selectedLanguage =
+    conversation.data?.language ?? config.data?.available_languages?.[0] ?? null;
+  const seededMessages = useMemo(
+    () => mapConversationMessages(conversation.data?.messages),
+    [conversation.data?.messages],
+  );
   const { messages, error, statusText, toggleRecording, replayAudio, clearChat } =
-    useVoiceChat(selectedLanguage);
+    useVoiceChat(selectedLanguage, {
+      initialConversationId: conversation.data?.id ?? null,
+      initialMessages: seededMessages,
+    });
 
   return (
     <SafeAreaView style={{ flex: 1 }} edges={["top", "left", "right"]}>

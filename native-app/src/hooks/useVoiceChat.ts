@@ -33,8 +33,16 @@ const RECORDING_OPTIONS = {
   },
 };
 
-export function useVoiceChat(language: string | null) {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+type UseVoiceChatOptions = {
+  initialConversationId?: number | null;
+  initialMessages?: ChatMessage[];
+};
+
+export function useVoiceChat(
+  language: string | null,
+  { initialConversationId = null, initialMessages = [] }: UseVoiceChatOptions = {},
+) {
+  const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
   const [error, setError] = useState<string | null>(null);
   const [statusText, setStatusText] = useState(
     language ? "ready" : "loading language...",
@@ -81,10 +89,20 @@ export function useVoiceChat(language: string | null) {
   }, [playerStatus.didJustFinish, setIsPlaying, setRecordingState, setTimerSeconds]);
 
   useEffect(() => {
-    conversationIdRef.current = null;
     setError(null);
     setStatusText(language ? "ready" : "loading language...");
-  }, [language]);
+
+    if (initialConversationId != null) {
+      conversationIdRef.current = initialConversationId;
+      return;
+    }
+
+    conversationIdRef.current = null;
+  }, [initialConversationId, language]);
+
+  useEffect(() => {
+    setMessages(initialMessages);
+  }, [initialMessages]);
 
   const ensureConversation = useCallback(async () => {
     if (conversationIdRef.current != null) return conversationIdRef.current;

@@ -6,6 +6,7 @@ import type {
   TranscribeResponse,
   UserResponse,
   ConversationResponse,
+  ConversationDetailResponse,
 } from "@/types/api.types";
 
 const DEFAULT_USERNAME = "mobile-user";
@@ -67,6 +68,12 @@ export function createConversation(language: string, tone?: string) {
 
 export function listConversations() {
   return apiFetch<ConversationResponse[]>("/api/conversations");
+}
+
+export function fetchConversation(conversationId: number, signal?: AbortSignal) {
+  return apiFetch<ConversationDetailResponse>(`/api/conversations/${conversationId}`, {
+    signal,
+  });
 }
 
 export function postTranscribe(
