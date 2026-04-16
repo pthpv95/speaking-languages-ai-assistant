@@ -9,7 +9,7 @@ import type {
   ConversationDetailResponse,
 } from "@/types/api.types";
 
-const DEFAULT_USERNAME = "mobile-user";
+const DEFAULT_USERNAME = "Hien";
 
 class ApiError extends Error {
   status: number;

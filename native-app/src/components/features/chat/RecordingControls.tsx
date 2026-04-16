@@ -40,8 +40,7 @@ export function RecordingControls({
       >
         {statusText}
       </Text>
-
-      <Text style={styles.hint}>Tap to record · Tap again to send</Text>
+      {/* <Text style={styles.hint}>Tap to record · Tap again to send</Text> */}
     </View>
   );
 }
@@ -54,9 +53,7 @@ const styles = StyleSheet.create({
     bottom: 0,
     alignItems: "center",
     gap: 10,
-    paddingTop: 16,
-    paddingBottom: 32,
-    paddingHorizontal: 24,
+    padding:16,
     backgroundColor: colors.background,
   },
   timer: {
