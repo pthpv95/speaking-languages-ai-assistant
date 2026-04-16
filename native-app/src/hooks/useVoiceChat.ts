@@ -266,12 +266,21 @@ export function useVoiceChat(
       if (!message.audioBase64 || !message.audioMime) return;
       await preparePlaybackSession();
       const dataUri = `data:${message.audioMime};base64,${message.audioBase64}`;
+
+      if (audioSource === dataUri && playerStatus.isLoaded) {
+        await player.seekTo(0);
+        player.play();
+        setIsPlaying(true);
+        setStatusText("speaking...");
+        return;
+      }
+
       setIsPlaying(true);
       setStatusText("speaking...");
       setAudioSource(dataUri);
       setShouldPlay(true);
     },
-    [preparePlaybackSession, setIsPlaying],
+    [audioSource, player, playerStatus.isLoaded, preparePlaybackSession, setIsPlaying],
   );
 
   const clearChat = useCallback(() => {
