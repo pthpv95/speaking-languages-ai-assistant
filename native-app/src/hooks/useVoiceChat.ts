@@ -17,21 +17,7 @@ import {
 } from "@/services/api";
 import type { ChatMessage } from "@/types/api.types";
 
-const RECORDING_OPTIONS = {
-  ...RecordingPresets.HIGH_QUALITY,
-  android: {
-    ...RecordingPresets.HIGH_QUALITY.android,
-    sampleRate: 16000,
-    numberOfChannels: 1,
-    bitRate: 64000,
-  },
-  ios: {
-    ...RecordingPresets.HIGH_QUALITY.ios,
-    sampleRate: 16000,
-    numberOfChannels: 1,
-    bitRate: 64000,
-  },
-};
+const RECORDING_OPTIONS = RecordingPresets.HIGH_QUALITY;
 
 type UseVoiceChatOptions = {
   initialConversationId?: number | null;
@@ -115,6 +101,23 @@ export function useVoiceChat(
     return conv.id;
   }, [language]);
 
+  const preparePlaybackSession = useCallback(async () => {
+    await setAudioModeAsync({
+      playsInSilentMode: true,
+      allowsRecording: false,
+      interruptionMode: "mixWithOthers",
+      shouldRouteThroughEarpiece: false,
+    });
+  }, []);
+
+  const cleanupRecordingSession = useCallback(async () => {
+    try {
+      await preparePlaybackSession();
+    } catch (err) {
+      console.warn("Failed to reset audio mode after recording", err);
+    }
+  }, [preparePlaybackSession]);
+
   const startRecording = useCallback(async () => {
     if (isTransitioningRef.current) return;
     if (!language) {
@@ -145,12 +148,20 @@ export function useVoiceChat(
         allowsRecording: true,
       });
 
-      await recorder.prepareToRecordAsync();
+      if (recorderState.mediaServicesDidReset || !recorderState.canRecord) {
+        await recorder.prepareToRecordAsync();
+      }
+
       recorder.record();
 
       setRecordingState("recording");
       setStatusText("recording...");
       setTimerSeconds(0);
+    } catch (err) {
+      await cleanupRecordingSession();
+      const msg = err instanceof Error ? err.message : "Failed to start recording";
+      setError(msg);
+      setStatusText("ready");
     } finally {
       isTransitioningRef.current = false;
     }
@@ -159,6 +170,9 @@ export function useVoiceChat(
     player,
     playerStatus.playing,
     recorder,
+    recorderState.canRecord,
+    recorderState.mediaServicesDidReset,
+    cleanupRecordingSession,
     setRecordingState,
     setTimerSeconds,
     setIsPlaying,
@@ -176,7 +190,7 @@ export function useVoiceChat(
 
       if (!uri) throw new Error("No recording URI");
 
-      await setAudioModeAsync({ allowsRecording: false });
+      await cleanupRecordingSession();
 
       // Ensure conversation exists
       const conversationId = await ensureConversation();
@@ -210,6 +224,7 @@ export function useVoiceChat(
       setMessages((prev) => [...prev, aiMessage]);
 
       // Step 3: Play audio response
+      await preparePlaybackSession();
       setRecordingState("idle");
       setTimerSeconds(0);
       setStatusText("speaking...");
@@ -218,6 +233,7 @@ export function useVoiceChat(
       setAudioSource(dataUri);
       setShouldPlay(true);
     } catch (err) {
+      await cleanupRecordingSession();
       const msg = err instanceof Error ? err.message : "Something went wrong";
       setError(msg);
       reset();
@@ -228,6 +244,8 @@ export function useVoiceChat(
   }, [
     recorder,
     ensureConversation,
+    cleanupRecordingSession,
+    preparePlaybackSession,
     reset,
     setRecordingState,
     setTimerSeconds,
@@ -244,14 +262,16 @@ export function useVoiceChat(
   }, [recorderState.isRecording, startRecording, stopAndProcess]);
 
   const replayAudio = useCallback(
-    (message: ChatMessage) => {
+    async (message: ChatMessage) => {
       if (!message.audioBase64 || !message.audioMime) return;
-      setIsPlaying(true);
+      await preparePlaybackSession();
       const dataUri = `data:${message.audioMime};base64,${message.audioBase64}`;
+      setIsPlaying(true);
+      setStatusText("speaking...");
       setAudioSource(dataUri);
       setShouldPlay(true);
     },
-    [setIsPlaying],
+    [preparePlaybackSession, setIsPlaying],
   );
 
   const clearChat = useCallback(() => {
